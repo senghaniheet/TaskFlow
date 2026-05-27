@@ -126,16 +126,17 @@ export const createTask = async (req, res) => {
 // Partial update (PATCH semantics) — only updates fields the client sends.
 // ─────────────────────────────────────────────────────────────────────────────
 export const updateTask = async (req, res) => {
-  // Whitelist updatable fields to prevent mass-assignment vulnerabilities
-  const ALLOWED_UPDATES = [
-    'title', 'description', 'status', 'priority',
-    'assignedTo', 'dueDate', 'estimatedHours', 'loggedHours', 'labels',
-  ];
-
+  const { title, description, status, priority, assignedTo, dueDate, estimatedHours, loggedHours, labels } = req.body;
   const updates = {};
-  ALLOWED_UPDATES.forEach((field) => {
-    if (req.body[field] !== undefined) updates[field] = req.body[field];
-  });
+  if (title !== undefined) updates.title = title;
+  if (description !== undefined) updates.description = description;
+  if (status !== undefined) updates.status = status;
+  if (priority !== undefined) updates.priority = priority;
+  if (assignedTo !== undefined) updates.assignedTo = assignedTo;
+  if (dueDate !== undefined) updates.dueDate = dueDate;
+  if (estimatedHours !== undefined) updates.estimatedHours = estimatedHours;
+  if (loggedHours !== undefined) updates.loggedHours = loggedHours;
+  if (labels !== undefined) updates.labels = labels;
 
   if (Object.keys(updates).length === 0) {
     throw new ApiError(400, 'No valid fields provided for update.');

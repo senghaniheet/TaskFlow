@@ -39,9 +39,12 @@ export const createProject = async (req, res) => {
 
 // PATCH /api/projects/:id
 export const updateProject = async (req, res) => {
-  const allowed = ['name', 'description', 'status', 'dueDate'];
+  const { name, description, status, dueDate } = req.body;
   const updates = {};
-  allowed.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+  if (name !== undefined) updates.name = name;
+  if (description !== undefined) updates.description = description;
+  if (status !== undefined) updates.status = status;
+  if (dueDate !== undefined) updates.dueDate = dueDate;
 
   const project = await Project.findOneAndUpdate(
     { _id: req.params.id, isDeleted: false },

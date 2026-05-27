@@ -50,7 +50,13 @@ This repository is defined as a monorepo containing two distinct application dom
 │   │   └── utils/          # Logger, Standard API Responses
 │   └── Dockerfile          # Secure, non-root production Node.js container
 │
-└── docker-compose.yml      # Orchestrates all 3 containers internally
+├── helm/                   # Helm Chart for Kubernetes Deployment
+│   └── taskflow/           # Custom Helm Chart package
+│       ├── Chart.yaml      # Chart metadata definition
+│       ├── values.yaml     # Custom deployment parameters
+│       └── templates/      # Parameterized resource manifests (StatefulSet, Deployment, Ingress)
+│
+└── docker-compose.yml      # Orchestrates all 3 containers locally
 ```
 
 ---
@@ -188,6 +194,45 @@ We recommend running the following verification steps in your CI pipelines *befo
 2. **Testing:** Run isolated unit & integration tests.
    - Server: `cd server && npm run test`
    - Client: `cd client && npm run test`
+
+### 4. Deploying to Kubernetes using Helm (Recommended)
+
+TaskFlow is packaged with a custom production-ready **Helm Chart** located inside the `helm/taskflow` directory. This chart manages the deployment of MongoDB (StatefulSet), the backend API (Deployment), the frontend web server (Deployment), and Ingress (Ingress).
+
+#### Prerequisites
+1. A running Kubernetes cluster (e.g. Minikube, Kind, EKS, or GKE).
+2. [Helm v3+](https://helm.sh/docs/intro/install/) installed.
+3. An Ingress controller active on your cluster (e.g. Nginx Ingress Controller).
+
+#### Installation
+To install the Helm chart with default values into the `taskflow` namespace:
+```bash
+helm install taskflow ./helm/taskflow --namespace taskflow --create-namespace
+```
+
+#### Local Development Overrides (Minikube / Dev Cluster)
+For local development, override replica counts and pull policies to pull local images:
+```bash
+helm install taskflow ./helm/taskflow \
+  --namespace taskflow \
+  --create-namespace \
+  --set api.replicaCount=1 \
+  --set web.replicaCount=1 \
+  --set api.image.pullPolicy=Never \
+  --set web.image.pullPolicy=Never
+```
+
+#### Upgrading Deployments
+To apply upgrades or value modifications:
+```bash
+helm upgrade taskflow ./helm/taskflow --namespace taskflow
+```
+
+#### Uninstalling
+To cleanly teardown all resources and volumes:
+```bash
+helm uninstall taskflow --namespace taskflow
+```
 
 ---
 

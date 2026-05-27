@@ -29,8 +29,7 @@ beforeAll(async () => {
 afterEach(async () => {
   // Clear all data between individual tests
   const collections = mongoose.connection.collections;
-  for (const key in collections) {
-    const collection = collections[key];
+  for (const collection of Object.values(collections)) {
     await collection.deleteMany({});
   }
 });

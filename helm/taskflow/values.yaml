@@ -1,0 +1,59 @@
+# Default values for taskflow.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+namespace: taskflow
+
+mongo:
+  image:
+    repository: mongo
+    tag: "7"
+    pullPolicy: IfNotPresent
+  storageSize: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+api:
+  replicaCount: 3
+  image:
+    repository: taskflow-api
+    tag: latest
+    pullPolicy: Never
+  env:
+    nodeEnv: production
+    port: "5000"
+    mongoUri: "mongodb://mongo:27017/taskflow"
+    jwtExpiresIn: "1d"
+    allowedOrigins: "http://localhost:3000"
+    jwtSecret: "sk-proj-Pj-CqJ8xLq-n0-gRzU6d7-L-t5-V-O7-sW2-nJ5-oK8-iL0-wT5-uV1-eR7-yT9-rQ3-aP5"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 256Mi
+
+web:
+  replicaCount: 3
+  image:
+    repository: taskflow-web
+    tag: latest
+    pullPolicy: Never
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 150m
+      memory: 128Mi
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  host: taskflow.local

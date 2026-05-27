@@ -32,9 +32,11 @@ export const createWorkspace = async (req, res) => {
 
 // PATCH /api/workspaces/:id
 export const updateWorkspace = async (req, res) => {
-  const allowed = ['name', 'description', 'members'];
+  const { name, description, members } = req.body;
   const updates = {};
-  allowed.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+  if (name !== undefined) updates.name = name;
+  if (description !== undefined) updates.description = description;
+  if (members !== undefined) updates.members = members;
 
   const workspace = await Workspace.findOneAndUpdate(
     { _id: req.params.id, isDeleted: false },

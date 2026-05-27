@@ -16,10 +16,11 @@ services:
   # ─────────────────────────────────────────────────────────
   # Express.js Backend Server
   # ─────────────────────────────────────────────────────────
-  server:
+  api:
     build:
       context: ./server
       dockerfile: Dockerfile
+    image: taskflow-api:latest
     container_name: taskflow_server
     restart: always
     ports:
@@ -43,12 +44,13 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
+    image: taskflow-web:latest
     container_name: taskflow_client
     restart: always
     ports:
       - '3000:80' # Maps host port 3000 to Nginx container port 80
     depends_on:
-      - server
+      - api
     networks:
       - taskflow_network
 
