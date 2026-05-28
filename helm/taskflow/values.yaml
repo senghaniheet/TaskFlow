@@ -21,16 +21,16 @@ mongo:
 api:
   replicaCount: 3
   image:
-    repository: taskflow-api
+    repository: ghcr.io/senghaniheet/taskflow-api
     tag: latest
-    pullPolicy: Never
+    pullPolicy: Always
   env:
     nodeEnv: production
     port: "5000"
     mongoUri: "mongodb://mongo:27017/taskflow"
     jwtExpiresIn: "1d"
     allowedOrigins: "http://localhost:3000"
-    jwtSecret: "sk-proj-Pj-CqJ8xLq-n0-gRzU6d7-L-t5-V-O7-sW2-nJ5-oK8-iL0-wT5-uV1-eR7-yT9-rQ3-aP5"
+    jwtSecret: ""
   resources:
     requests:
       cpu: 100m
@@ -42,9 +42,9 @@ api:
 web:
   replicaCount: 3
   image:
-    repository: taskflow-web
+    repository: ghcr.io/senghaniheet/taskflow-web
     tag: latest
-    pullPolicy: Never
+    pullPolicy: Always
   resources:
     requests:
       cpu: 50m
