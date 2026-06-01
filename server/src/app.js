@@ -80,7 +80,9 @@ const limiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests. Please try again later.' },
 });
-app.use('/api', limiter);
+if (process.env.DISABLE_RATE_LIMIT !== 'true') {
+  app.use('/api', limiter);
+}
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

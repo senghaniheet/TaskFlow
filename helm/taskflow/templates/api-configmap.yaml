@@ -12,3 +12,4 @@ data:
   MONGO_URI: {{ .Values.api.env.mongoUri | quote }}
   JWT_EXPIRES_IN: {{ .Values.api.env.jwtExpiresIn | quote }}
   ALLOWED_ORIGINS: {{ .Values.api.env.allowedOrigins | quote }}
+  DISABLE_RATE_LIMIT: {{ .Values.api.env.disableRateLimit | default "false" | quote }}

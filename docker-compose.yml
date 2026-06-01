@@ -32,6 +32,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - DISABLE_RATE_LIMIT=${DISABLE_RATE_LIMIT:-false}
     depends_on:
       - mongo
     networks:
