@@ -20,12 +20,6 @@ jobs:
         with:
           clean: true
 
-      - name: Setup Helm
-        uses: azure/setup-helm@29960d0f5f19214b88e1d9ba750a9914ab0f1a2f # v4.0.0
-
-      - name: Setup Kubectl
-        uses: azure/setup-kubectl@3e0aec4d80787158d308d7b364cb1b702e7feb7f # v4.0.0
-
       - name: Login to GHCR
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
@@ -33,35 +27,22 @@ jobs:
         run: |
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/taskflow-api:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/taskflow-api:latest \
             ./server
 
       - name: Build Web Image
         run: |
           docker build \
             -t ghcr.io/${{ github.repository_owner }}/taskflow-web:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository_owner }}/taskflow-web:latest \
             ./client
 
       - name: Push API Image
         run: |
           docker push ghcr.io/${{ github.repository_owner }}/taskflow-api:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository_owner }}/taskflow-api:latest
 
       - name: Push Web Image
         run: |
           docker push ghcr.io/${{ github.repository_owner }}/taskflow-web:${{ github.sha }}
-
-      - name: Setup Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
-
-      - name: Helm Upgrade Deploy
-        run: |
-          helm upgrade --install taskflow ./helm/taskflow \
-            --namespace taskflow \
-            --create-namespace \
-            --set api.image.repository=ghcr.io/${{ github.repository_owner }}/taskflow-api \
-            --set api.image.tag=${{ github.sha }} \
-            --set web.image.repository=ghcr.io/${{ github.repository_owner }}/taskflow-web \
-            --set web.image.tag=${{ github.sha }} \
-            --set api.env.jwtSecret=${{ secrets.JWT_SECRET }} \
-            --description "Deploy commit ${{ github.sha }}"
+          docker push ghcr.io/${{ github.repository_owner }}/taskflow-web:latest
