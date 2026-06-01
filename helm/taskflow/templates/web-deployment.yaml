@@ -7,7 +7,9 @@ metadata:
     {{- include "taskflow.labels" . | nindent 4 }}
     app: web
 spec:
+  {{- if not .Values.web.autoscaling.enabled }}
   replicas: {{ .Values.web.replicaCount }}
+  {{- end }}
   strategy:
     type: RollingUpdate
     rollingUpdate:

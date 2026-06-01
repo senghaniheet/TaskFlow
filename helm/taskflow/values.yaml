@@ -29,7 +29,7 @@ api:
     port: "5000"
     mongoUri: "mongodb://mongo:27017/taskflow"
     jwtExpiresIn: "1d"
-    allowedOrigins: "http://localhost:3000"
+    allowedOrigins: "http://localhost:8080,http://taskflow.local"
     jwtSecret: ""
   resources:
     requests:
@@ -38,6 +38,12 @@ api:
     limits:
       cpu: 300m
       memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
 web:
   replicaCount: 3
@@ -52,6 +58,12 @@ web:
     limits:
       cpu: 150m
       memory: 128Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
 
 ingress:
   enabled: true
