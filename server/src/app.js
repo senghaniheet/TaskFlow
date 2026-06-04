@@ -25,6 +25,7 @@ import cors from 'cors';
 import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import crypto from 'crypto';
 
 import workspaceRoutes from './routes/workspaceRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
@@ -89,7 +90,7 @@ const leak = [];
 app.get('/api/leak', (req, res) => {
   logger.warn('Memory leak triggered manually!');
   setInterval(() => {
-    leak.push('x'.repeat(1024 * 1024));
+    leak.push(crypto.randomBytes(1024 * 1024));
   }, 1000);
   res.status(200).json({ success: true, message: 'Memory leak started' });
 });
