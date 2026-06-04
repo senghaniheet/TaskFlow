@@ -2,6 +2,12 @@
 
 TaskFlow is a production-grade SaaS Project Management and Task Tracking boilerplate. It provides a robust, highly scalable starting point for building team-based productivity applications, featuring full multi-tenant Workspaces, Projects, and Kanban-style Task tracking.
 
+> 📖 **New to Kubernetes/Grafana/Prometheus?**
+> This project comes with a complete learning guide built from this exact setup journey.
+> → Read the [**Kubernetes + Grafana + Prometheus Guide**](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md)
+
+---
+
 ## 🚀 Tech Stack
 
 **Frontend:**
@@ -19,13 +25,14 @@ TaskFlow is a production-grade SaaS Project Management and Task Tracking boilerp
 - **express-validator** (Strict route payload validation)
 
 **Infrastructure:**
-- **Docker Compose** (Containerized orchestration for DB, Web, and API)
+- **Docker & Docker Compose** (Local containerized orchestration)
+- **Kubernetes + Helm** (Production-grade orchestration)
+- **Prometheus + Grafana** (Metrics, dashboards, and alerting)
+- **GitHub Actions** (CI/CD — build & push to GHCR on every merge to `main`)
 
 ---
 
 ## 🏗️ Project Structure
-
-This repository is defined as a monorepo containing two distinct application domains:
 
 ```text
 ├── client/                 # React Frontend
@@ -50,38 +57,47 @@ This repository is defined as a monorepo containing two distinct application dom
 │   │   └── utils/          # Logger, Standard API Responses
 │   └── Dockerfile          # Secure, non-root production Node.js container
 │
-├── helm/                   # Helm Chart for Kubernetes Deployment
-│   └── taskflow/           # Custom Helm Chart package
-│       ├── Chart.yaml      # Chart metadata definition
-│       ├── values.yaml     # Custom deployment parameters
-│       └── templates/      # Parameterized resource manifests (StatefulSet, Deployment, Ingress)
+├── helm/
+│   ├── taskflow/           # Custom Helm Chart — deploys the full app stack
+│   │   ├── Chart.yaml
+│   │   ├── values.yaml
+│   │   └── templates/      # Deployment, StatefulSet, HPA, PDB, Ingress, etc.
+│   ├── monitoring/         # Helm values for kube-prometheus-stack
+│   │   └── values.yaml
+│   └── FailureTest/        # YAML examples for failure scenarios (CrashLoopBackOff, etc.)
 │
-└── docker-compose.yml      # Orchestrates all 3 containers locally
+├── monitoring/
+│   ├── taskflow-dashboard-import.json   # Grafana dashboard (import this)
+│   └── prometheus-alert-rule.yaml       # PrometheusRule for CPU/memory alerts
+│
+├── .github/workflows/
+│   └── deploy.yml          # GitHub Actions CI/CD — build & push Docker images
+│
+├── docker-compose.yml      # Orchestrates all 3 containers locally
+└── KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md  # 📖 Full learning guide
 ```
 
 ---
 
 ## ⚙️ Getting Started
 
-You can run TaskFlow using Docker (Recommended) or locally on your machine via NPM.
-
-### Method A: Docker Compose (Recommended)
+### Method A: Docker Compose (Recommended for local dev)
 
 1. Make sure [Docker Desktop](https://www.docker.com/products/docker-desktop/) is running.
 2. At the root of the project, run:
 ```bash
 docker compose up --build
 ```
-3. The cluster will spin up 3 containers: `taskflow_mongo` (27017), `taskflow_server` (5000), and `taskflow_client` (Nginx serving on port 80, mapped to host port 3000).
-4. Access the application by opening `http://localhost:3000` in your browser. All API requests to `/api/*` are automatically reverse-proxied by Nginx internally to the backend server.
+3. This spins up 3 containers: `taskflow_mongo` (27017), `taskflow_server` (5000), and `taskflow_client` (Nginx on port 3000).
+4. Open `http://localhost:3000`. All `/api/*` requests are reverse-proxied by Nginx to the backend automatically.
 
-*(Note: Data written to MongoDB inside Docker will perfectly persist across restarts via internal volumes)*
+*(MongoDB data persists across restarts via Docker volumes)*
 
-### Method B: Manual Setup
+### Method B: Manual Setup (NPM)
 
-**Requirements:** You must have a MongoDB server running locally on `mongodb://localhost:27017`.
+**Requirements:** MongoDB must be running locally at `mongodb://localhost:27017`.
 
-**1. Setup the Server:**
+**1. Backend:**
 ```bash
 cd server
 npm install
@@ -89,8 +105,7 @@ cp .env.example .env
 npm run dev
 ```
 
-**2. Setup the Client:**
-Open a separate terminal window:
+**2. Frontend:**
 ```bash
 cd client
 npm install
@@ -101,164 +116,373 @@ npm run dev
 
 ## 🗄️ Database Management & Seeding
 
-The server includes explicit scripts to track schema evolution and provide local sandbox data.
-
-Run these scripts from inside the `server/` directory:
+Run these from the `server/` directory:
 
 ```bash
-# Safely apply indexes and structural migrations to your DB
+# Apply indexes and schema migrations
 npm run migrate
 
-# DROP ALL existing data and insert a hyper-realistic nested dataset 
-# (Workspaces -> Projects -> Kanban Tasks)
+# Drop all data and seed with realistic test data
 npm run seed
 
-# Run both in sequence (Great for freshly cloned environments)
+# Run both in sequence (great for fresh environments)
 npm run migrate:seed
 ```
 
-> **Warning:** `npm run seed` drops entire collections. Built-in logic prevents this script from executing if `NODE_ENV=production`.
+> **Warning:** `npm run seed` drops entire collections. It won't run if `NODE_ENV=production`.
+
+---
+
+## ☸️ Kubernetes Deployment (Full Setup)
+
+> 📖 **Learn the concepts first:** [Kubernetes Core Concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#1-kubernetes-core-concepts) | [Helm Guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#3-helm--kubernetes-package-manager)
+
+### Prerequisites
+
+| Tool | Purpose | Install |
+|------|---------|---------|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | Build images | Required |
+| [Minikube](https://minikube.sigs.k8s.io/docs/start/) | Local K8s cluster | `winget install Kubernetes.minikube` |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | Cluster CLI | Bundled with Docker Desktop |
+| [Helm v3+](https://helm.sh/docs/intro/install/) | Package manager for K8s | `winget install Helm.Helm` |
+
+### Step 1 — Start Minikube
+
+> 📖 [Full Minikube setup guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#2-setting-up-minikube-locally)
+
+```bash
+# Start with enough resources for the monitoring stack
+minikube start --cpus=4 --memory=6144
+
+# Enable required addons
+minikube addons enable ingress         # Nginx Ingress Controller
+minikube addons enable metrics-server  # Required for HPA (CPU/memory autoscaling)
+
+# Verify everything is up
+minikube status
+kubectl get nodes
+```
+
+### Step 2 — Build & Load Docker Images
+
+```bash
+# Build the API image
+docker build -t ghcr.io/senghaniheet/taskflow-api:latest ./server
+
+# Build the Web image
+docker build -t ghcr.io/senghaniheet/taskflow-web:latest ./client
+
+# Load images into Minikube (skips registry push for local dev)
+minikube image load ghcr.io/senghaniheet/taskflow-api:latest
+minikube image load ghcr.io/senghaniheet/taskflow-web:latest
+```
+
+### Step 3 — Deploy with Helm
+
+> 📖 [Helm commands reference](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#key-helm-commands)
+
+```bash
+# Install the full app stack into the 'taskflow' namespace
+helm install taskflow ./helm/taskflow \
+  --namespace taskflow \
+  --create-namespace \
+  --set api.image.pullPolicy=Never \
+  --set web.image.pullPolicy=Never
+
+# Watch pods come up
+kubectl get pods -n taskflow -w
+```
+
+All pods should reach `Running` status within ~60 seconds.
+
+### Step 4 — Configure Local Ingress
+
+```bash
+# Get the Minikube IP
+minikube ip
+# Example output: 192.168.49.2
+```
+
+Add this line to your hosts file (`C:\Windows\System32\drivers\etc\hosts` on Windows):
+```
+192.168.49.2  taskflow.local
+```
+
+Now open `http://taskflow.local` in your browser.
+
+### Step 5 — Verify the Deployment
+
+```bash
+# All pods running?
+kubectl get pods -n taskflow
+
+# Services exposed?
+kubectl get svc -n taskflow
+
+# Ingress routing?
+kubectl get ingress -n taskflow
+
+# HPA configured?
+kubectl get hpa -n taskflow
+
+# Check logs for any issues
+kubectl logs -l app=api -n taskflow --tail=50
+```
+
+### Helm Operations Reference
+
+```bash
+# Apply changes after editing values.yaml
+helm upgrade taskflow ./helm/taskflow --namespace taskflow
+
+# Rolling restart (force pods to pull new image)
+kubectl rollout restart deployment/taskflow-api -n taskflow
+
+# Teardown everything
+helm uninstall taskflow --namespace taskflow
+```
+
+---
+
+## 📊 Monitoring Setup (Prometheus + Grafana)
+
+> 📖 [Prometheus concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#8-prometheus--metrics-collection) | [Grafana guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#9-grafana--dashboards--visualization) | [PromQL reference](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#10-promql--querying-metrics)
+
+### Step 1 — Install kube-prometheus-stack
+
+```bash
+# Add the Helm repo
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# Install Prometheus + Grafana + Alertmanager + exporters
+helm install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  -f ./helm/monitoring/values.yaml
+
+# Wait for all pods to be ready (~2-3 minutes)
+kubectl get pods -n monitoring -w
+```
+
+### Step 2 — Access Prometheus
+
+> 📖 [Understanding Prometheus metrics](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#key-metric-sources)
+
+```bash
+kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 9090:9090
+```
+
+Open `http://localhost:9090` → Go to **Graph** tab to run PromQL queries.
+
+**Try these queries to verify your app is being monitored:**
+```promql
+# Are TaskFlow pods visible?
+kube_pod_info{namespace="taskflow"}
+
+# API pod CPU usage
+sum(rate(container_cpu_usage_seconds_total{namespace="taskflow", container="api"}[5m])) by (pod)
+
+# API pod memory usage (MiB)
+container_memory_working_set_bytes{namespace="taskflow", container="api"} / 1024 / 1024
+```
+
+### Step 3 — Access Grafana
+
+```bash
+kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80
+```
+
+**Get the admin password (PowerShell):**
+```powershell
+$encoded = kubectl get secret monitoring-grafana -n monitoring -o jsonpath="{.data.admin-password}"
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encoded))
+```
+
+Login at `http://localhost:3000` → Username: `admin`
+
+### Step 4 — Import the TaskFlow Dashboard
+
+1. In Grafana, go to **Dashboards → Import**
+2. Click **Upload JSON file**
+3. Select `monitoring/taskflow-dashboard-import.json`
+4. Select the **Prometheus** data source
+5. Click **Import**
+
+The dashboard includes:
+- 📦 **Overview** — Live pod counts (API, Web, MongoDB, Total)
+- 🎯 **Desired Pods** — HPA desired vs actual replica tracking
+- ⚡ **CPU & Autoscaling** — Per-pod CPU, HPA scale events, utilization %
+- 🧠 **Memory** — Per-pod memory usage, leak detection trend
+
+### Step 5 — Apply Alert Rules
+
+> 📖 [Alert rules explained](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#11-alert-rules)
+
+```bash
+kubectl apply -f monitoring/prometheus-alert-rule.yaml
+
+# Verify Prometheus picked it up
+kubectl get prometheusrule -n monitoring
+```
+
+Check active alerts at `http://localhost:9090/alerts`.
+
+---
+
+## ⚡ Autoscaling (HPA)
+
+> 📖 [HPA deep dive](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#6-horizontal-pod-autoscaler-hpa)
+
+The API and Web services both have Horizontal Pod Autoscalers configured in [`helm/taskflow/values.yaml`](./helm/taskflow/values.yaml):
+
+| Service | Min Pods | Max Pods | CPU Target | Memory Target |
+|---------|---------|---------|-----------|--------------|
+| API | 3 | 10 | 60% | 80% |
+| Web | 1 | 10 | 80% | 80% |
+
+**Watch HPA in action:**
+```bash
+kubectl get hpa -n taskflow -w
+```
+
+**Trigger autoscaling with a load test:**
+
+> 📖 [Load testing guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#12-load-testing--autoscaling-validation)
+
+```bash
+# Start load generator
+kubectl run load-generator \
+  --image=busybox \
+  --restart=Never \
+  -n taskflow \
+  --command -- sh -c "while true; do wget -q -O- http://api:5000/api/health; done"
+
+# Watch pods scale up in a separate terminal
+kubectl get pods -n taskflow -w
+
+# Clean up when done
+kubectl delete pod load-generator -n taskflow
+```
+
+---
+
+## 🛡️ Reliability Features
+
+> 📖 [Pod Disruption Budgets](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#7-pod-disruption-budgets-pdb)
+
+| Feature | Details |
+|---------|---------|
+| **Rolling Updates** | `maxUnavailable: 0` — zero downtime deploys |
+| **Pod Disruption Budgets** | `maxUnavailable: 1` — at least N-1 pods always available |
+| **Liveness Probes** | Auto-restart unhealthy pods via `/api/health` |
+| **Readiness Probes** | Traffic only routes to ready pods |
+| **Persistent Storage** | MongoDB data survives pod restarts via PVC |
+
+---
+
+## 🚢 CI/CD Pipeline
+
+> 📖 [CI/CD with GitHub Actions](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#14-cicd-with-github-actions)
+
+On every push to `main`, GitHub Actions automatically:
+
+1. Builds the API Docker image → tags with `latest` + commit SHA
+2. Builds the Web Docker image → tags with `latest` + commit SHA
+3. Pushes both images to **GHCR** (GitHub Container Registry)
+
+**Required GitHub Secret:**
+- `GHCR_TOKEN` — a Personal Access Token with `write:packages` scope
+
+**Apply new images to the cluster:**
+```bash
+kubectl rollout restart deployment/taskflow-api -n taskflow
+kubectl rollout restart deployment/taskflow-web -n taskflow
+
+# Watch the rollout
+kubectl rollout status deployment/taskflow-api -n taskflow
+```
 
 ---
 
 ## 🛡️ Architecture & Design Principles
 
 ### Backend
-- **Envelope API Responses**: Every API returns a predictable shape: `{ success, statusCode, message, data }`.
-- **Global Error Handling**: Unhandled exceptions and explicit `ApiError` throws are caught by a final middleware returning consistent 4xx and 5xx payloads to the client.
-- **Relational Integrity**: Workspaces, Projects, and Tasks are linked utilizing `ObjectId` referencing. Advanced endpoints take advantage of `.populate()` chains to serve fully denormalized views in a single HTTP request.
+- **Envelope API Responses**: Every API returns `{ success, statusCode, message, data }`.
+- **Global Error Handling**: Unhandled exceptions and `ApiError` throws are caught by final middleware, returning consistent 4xx/5xx payloads.
+- **Relational Integrity**: Workspaces → Projects → Tasks linked via `ObjectId` with `.populate()` chains for denormalized views in one request.
 
 ### Frontend
-- **Stable Dispatch Pattern**: Context API uses a stable `useCallback` referenced `dispatch` function to prevent unneeded component re-rendering.
-- **Hook-Driven Data**: React Components barely handle direct API logic. Using custom hooks like `useTasks()` keeps layout components perfectly clean.
-- **Aesthetics First**: A ground-up `index.css` file implements a gorgeous, modern aesthetic leveraging CSS color mixing variables and fluid shadows. 
+- **Stable Dispatch Pattern**: Context API uses a stable `useCallback` `dispatch` to prevent unnecessary re-renders.
+- **Hook-Driven Data**: Custom hooks like `useTasks()` own all API logic, keeping layout components clean.
+- **Aesthetics First**: Ground-up `index.css` using CSS color-mixing variables and fluid shadows.
 
 ---
 
-## 🚢 DevOps & Deployment Guide
+## 🧪 Testing
 
-For operations and DevOps teams, TaskFlow is designed to be easily integrated into modern CI/CD pipelines (GitHub Actions, GitLab CI, AWS CodePipeline).
+> **Tip:** Tests are fully isolated. No database setup needed.
 
-### 1. Environment Variables Reference
-To run this application in production, ensure the following environment variables are securely injected into your containers or deployment environments:
-
-**Server Environment (API):**
-- `NODE_ENV`: Set to `production` (enables optimized logging, disables nodemon auto-reloads, and disables destructive CLI tools like `npm run seed`).
-- `PORT`: (Default `5000`)
-- `MONGO_URI`: A valid MongoDB connection string (e.g., Atlas, DocumentDB).
-- `JWT_SECRET`: A long, cryptographically secure random string.
-- `JWT_EXPIRES_IN`: E.g., `7d` or `24h`.
-- `ALLOWED_ORIGINS`: Used by CORS middleware (e.g., `https://app.yourdomain.com`).
-
-**Client Environment (React Built via Vite):**
-- `VITE_API_URL`: Optional. The fully qualified public URL pointing to your backend endpoint (e.g., `https://api.yourdomain.com/api`).
-- **Nginx Reverse Proxy Benefit**: In standard setups where the frontend and backend are deployed in the same cluster or single host, Nginx automatically reverse-proxies `/api` routes directly to the backend. In this case, `VITE_API_URL` is omitted and the browser utilizes relative path requests (`/api/*`), removing any cross-origin resource sharing (CORS) complexity.
-
-### 2. Building for Production
-
-TaskFlow is preconfigured with optimized, production-ready Dockerfiles.
-
-#### Backend Container Architecture (`server/Dockerfile`)
-- **Security-First**: The container runs under a dedicated, non-root `node` user instead of `root` to prevent privilege escalation.
-- **Dependency Optimization**: Uses `npm ci --omit=dev` to only install required production dependencies, significantly shrinking the image size and leaving out testing packages (like Jest or memory DB servers).
-- **Process Signals**: Runs Node directly (`CMD ["node", "src/index.js"]`) ensuring `SIGTERM` and `SIGINT` signals are handled gracefully for zero-downtime rolling updates.
-
-To build and run:
+### Backend (Jest + Supertest + mongodb-memory-server)
 ```bash
 cd server
-docker build -t taskflow-api:latest .
-docker run -d -p 5000:5000 --env-file .env.production --name taskflow-api-server taskflow-api:latest
+npm run test
 ```
 
-#### Frontend Container Architecture (`client/Dockerfile`)
-- **Multi-Stage Build**:
-  - **Stage 1 (Builder)**: Installs development dependencies and compiles Vite production assets.
-  - **Stage 2 (Nginx)**: Packs the static HTML/JS/CSS assets into a lightweight, hardened `nginx:stable-alpine` image.
-- **Production Routing**: Uses Nginx's `try_files` routing rule to handle React Router client-side path fallbacks.
-- **Compression**: Gzip compression is enabled natively for optimal client payload loading speeds.
-- **Built-in Proxying**: Automatically reverse proxies `/api` requests to the backend API service (`taskflow_server:5000`).
-
-To build and run:
+### Frontend (Vitest + React Testing Library)
 ```bash
 cd client
-docker build -t taskflow-web:latest .
-# Run on the same network as the api container to support direct internal Nginx routing
-docker run -d -p 3000:80 --name taskflow-web-client taskflow-web:latest
-```
-
-### 3. CI/CD Pipeline Hooks
-
-We recommend running the following verification steps in your CI pipelines *before* building your Docker containers:
-1. **Linting:** Ensure code quality standards.
-   - Client: `cd client && npm run lint`
-2. **Testing:** Run isolated unit & integration tests.
-   - Server: `cd server && npm run test`
-   - Client: `cd client && npm run test`
-
-### 4. Deploying to Kubernetes using Helm (Recommended)
-
-TaskFlow is packaged with a custom production-ready **Helm Chart** located inside the `helm/taskflow` directory. This chart manages the deployment of MongoDB (StatefulSet), the backend API (Deployment), the frontend web server (Deployment), and Ingress (Ingress).
-
-#### Prerequisites
-1. A running Kubernetes cluster (e.g. Minikube, Kind, EKS, or GKE).
-2. [Helm v3+](https://helm.sh/docs/intro/install/) installed.
-3. An Ingress controller active on your cluster (e.g. Nginx Ingress Controller).
-
-#### Installation
-To install the Helm chart with default values into the `taskflow` namespace:
-```bash
-helm install taskflow ./helm/taskflow --namespace taskflow --create-namespace
-```
-
-#### Local Development Overrides (Minikube / Dev Cluster)
-For local development, override replica counts and pull policies to pull local images:
-```bash
-helm install taskflow ./helm/taskflow \
-  --namespace taskflow \
-  --create-namespace \
-  --set api.replicaCount=1 \
-  --set web.replicaCount=1 \
-  --set api.image.pullPolicy=Never \
-  --set web.image.pullPolicy=Never
-```
-
-#### Upgrading Deployments
-To apply upgrades or value modifications:
-```bash
-helm upgrade taskflow ./helm/taskflow --namespace taskflow
-```
-
-#### Uninstalling
-To cleanly teardown all resources and volumes:
-```bash
-helm uninstall taskflow --namespace taskflow
+npm run test
 ```
 
 ---
 
-## 🧪 Testing Methodology
+## 🌍 Environment Variables Reference
 
-TaskFlow now includes a comprehensive automated test suite for both frontend and backend domains. 
+### Server (API)
 
-> **Tip:** The test suite is designed to be fully isolated. You do not need to drop or restart your databases to run tests locally.
+| Variable | Required | Default | Description |
+|----------|---------|---------|-------------|
+| `NODE_ENV` | ✅ | — | `production` / `development` |
+| `PORT` | — | `5000` | API server port |
+| `MONGO_URI` | ✅ | — | MongoDB connection string |
+| `JWT_SECRET` | ✅ | — | Cryptographically secure random string |
+| `JWT_EXPIRES_IN` | — | `1d` | Token expiry (e.g. `7d`, `24h`) |
+| `ALLOWED_ORIGINS` | ✅ | — | CORS whitelist (comma-separated URLs) |
 
-### Backend Tests (Jest + Supertest)
-The backend test suite uses `jest` and `supertest` to run integration tests against the Express API, mocking HTTP requests seamlessly. We use `mongodb-memory-server` which dynamically spins up an isolated, temporary MongoDB instance *just* for the test runner. 
-- Run Backend Tests:
-  ```bash
-  cd server
-  npm run test
-  ```
+### Client (React / Vite)
 
-### Frontend Tests (Vitest + React Testing Library)
-The frontend uses `vitest` (which shares the existing Vite configuration natively) alongside `jsdom` and `@testing-library/react`. We test our React component rendering, interactive behaviors, and custom React hook (`useTasks`) context boundaries safely.
-- Run Frontend Tests:
-  ```bash
-  cd client
-  npm run test
-  ```
+| Variable | Required | Description |
+|----------|---------|-------------|
+| `VITE_API_URL` | — | Full API URL if not using Nginx proxy (e.g. `https://api.yourdomain.com/api`) |
+
+> In Kubernetes/Docker setups, Nginx automatically proxies `/api/*` to the backend — `VITE_API_URL` can be omitted.
+
+---
+
+## 📚 Learning Resources
+
+| Topic | Link |
+|-------|------|
+| Full K8s + Grafana + Prometheus guide | [KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md) |
+| Kubernetes core concepts | [Section 1 — Core Concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#1-kubernetes-core-concepts) |
+| Minikube local setup | [Section 2 — Minikube](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#2-setting-up-minikube-locally) |
+| Helm package manager | [Section 3 — Helm](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#3-helm--kubernetes-package-manager) |
+| Deployments vs StatefulSets | [Section 4 — Workloads](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#4-workloads-deployments-vs-statefulsets) |
+| Services & Ingress | [Section 5 — Networking](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#5-services--ingress) |
+| Horizontal Pod Autoscaler | [Section 6 — HPA](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#6-horizontal-pod-autoscaler-hpa) |
+| Pod Disruption Budgets | [Section 7 — PDB](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#7-pod-disruption-budgets-pdb) |
+| Prometheus setup & metrics | [Section 8 — Prometheus](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#8-prometheus--metrics-collection) |
+| Grafana dashboards | [Section 9 — Grafana](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#9-grafana--dashboards--visualization) |
+| PromQL queries | [Section 10 — PromQL](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#10-promql--querying-metrics) |
+| Alert rules | [Section 11 — Alerts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#11-alert-rules) |
+| Load testing & autoscaling | [Section 12 — Load Testing](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#12-load-testing--autoscaling-validation) |
+| Memory leak detection | [Section 13 — Memory](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#13-memory-leak-detection) |
+| CI/CD with GitHub Actions | [Section 14 — CI/CD](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#14-cicd-with-github-actions) |
+| kubectl & Helm cheatsheet | [Section 15 — Cheatsheet](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#15-quick-reference-cheatsheet) |
 
 ---
 
 ## 📝 License
-MIT License - Free to use and scale!
+
+MIT License — Free to use and scale!
