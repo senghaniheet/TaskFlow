@@ -6,6 +6,31 @@ This guide isn't just a list of commands. It's an interactive curriculum designe
 
 ---
 
+## 📖 Introduction: Why Kubernetes?
+
+![Kubernetes Architecture Overview](./assets/kubernetes-architecture.jpg)
+
+### What is Kubernetes?
+Kubernetes (often abbreviated as K8s) is an open-source container orchestration platform. If Docker is the shipping container that holds your application and its dependencies, Kubernetes is the automated port facility that manages those containers—loading them, moving them, duplicating them, and replacing them if they break.
+
+### Why is it built for Scalability?
+Kubernetes is designed around a **desired state** declarative model. You don't tell Kubernetes *how* to do things; you tell it *what* you want. If you say, "I want 5 instances of my API running," Kubernetes constantly monitors your cluster to ensure exactly 5 instances exist.
+- **Horizontal Scaling:** When traffic spikes, it can automatically spin up more identical containers (Pods) across multiple physical servers (Nodes).
+- **Self-Healing:** If a server crashes, Kubernetes instantly detects that the container count has dropped and schedules new containers on healthy servers to maintain your desired state.
+- **Load Balancing:** It automatically distributes incoming network traffic across all healthy instances of your application so no single container is overwhelmed.
+
+### When to USE Kubernetes
+- **Microservices Architecture:** When your app is broken into many small, independent services (like an API, an Auth service, a background worker, and a database) that need to talk to each other securely.
+- **High Availability is Critical:** When your application absolutely cannot go down, even if a server catches fire.
+- **Variable Workloads:** When you have sudden spikes in traffic (like Black Friday sales) and need the system to auto-scale instantly, then scale back down to save money.
+
+### When NOT to use Kubernetes
+- **Simple Monoliths:** If your app is a single codebase deployed to a single server (like a basic WordPress blog or a simple MVP), K8s is extreme overkill. The overhead of managing the cluster will outweigh the benefits.
+- **Small Teams with No DevOps:** Kubernetes has a steep learning curve. If your team is small and focused purely on shipping features, stick to simpler PaaS solutions like Vercel, Heroku, or Render.
+- **Static Websites:** If you just have HTML/CSS/JS files, host them on a CDN or S3 bucket, not a K8s cluster.
+
+---
+
 ## 🎯 Phase 1: Setup & Groundwork
 
 Your first task is to get the code and start the local environment.
