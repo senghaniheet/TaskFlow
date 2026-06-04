@@ -84,6 +84,16 @@ if (process.env.DISABLE_RATE_LIMIT !== 'true') {
   app.use('/api', limiter);
 }
 
+// ── Temp Memory Leak Endpoint ────────────────────────────────────────────────
+const leak = [];
+app.get('/api/leak', (req, res) => {
+  logger.warn('Memory leak triggered manually!');
+  setInterval(() => {
+    leak.push(Buffer.alloc(1024 * 1024));
+  }, 1000);
+  res.status(200).json({ success: true, message: 'Memory leak started' });
+});
+
 // ── Health Check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
   res.status(200).json({

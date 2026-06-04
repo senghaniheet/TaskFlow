@@ -1,3 +1,4 @@
+{{- if .Values.mongo.enabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -36,3 +37,4 @@ spec:
         - name: mongo-storage
           persistentVolumeClaim:
             claimName: {{ include "taskflow.fullname" . }}-mongo-pvc
+{{- end }}

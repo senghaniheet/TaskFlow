@@ -9,7 +9,7 @@ metadata:
 data:
   NODE_ENV: {{ .Values.api.env.nodeEnv | quote }}
   PORT: {{ .Values.api.env.port | quote }}
-  MONGO_URI: {{ .Values.api.env.mongoUri | quote }}
+  LOG_LEVEL: {{ .Values.api.env.logLevel | default "info" | quote }}
   JWT_EXPIRES_IN: {{ .Values.api.env.jwtExpiresIn | quote }}
   ALLOWED_ORIGINS: {{ .Values.api.env.allowedOrigins | quote }}
   DISABLE_RATE_LIMIT: {{ .Values.api.env.disableRateLimit | default "false" | quote }}
