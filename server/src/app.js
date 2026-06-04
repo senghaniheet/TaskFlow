@@ -49,7 +49,7 @@ const httpRequestDurationMicroseconds = new promClient.Histogram({
 app.use((req, res, next) => {
   const start = process.hrtime();
   res.on('finish', () => {
-    if (req.path !== '/api/metrics') {
+    if (req.path !== '/api/metrics' && req.path !== '/api/health') {
       const diff = process.hrtime(start);
       const durationSeconds = diff[0] + diff[1] / 1e9;
       const route = req.route ? req.baseUrl + req.route.path : req.path;

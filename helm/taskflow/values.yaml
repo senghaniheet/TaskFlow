@@ -51,6 +51,11 @@ api:
   pdb:
     enabled: true
     maxUnavailable: 1
+  serviceMonitor:
+    enabled: true
+    interval: 5s
+    path: /api/metrics
+    release: monitoring
 
 web:
   replicaCount: 3
