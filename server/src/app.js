@@ -49,7 +49,7 @@ const httpRequestDurationMicroseconds = new promClient.Histogram({
 app.use((req, res, next) => {
   const start = process.hrtime();
   res.on('finish', () => {
-    if (req.path !== '/metrics') {
+    if (req.path !== '/api/metrics') {
       const diff = process.hrtime(start);
       const durationSeconds = diff[0] + diff[1] / 1e9;
       const route = req.route ? req.baseUrl + req.route.path : req.path;
@@ -122,7 +122,7 @@ app.get('/api/leak', (req, res) => {
 });
 
 // ── Metrics Endpoint ──────────────────────────────────────────────────────────
-app.get('/metrics', async (req, res) => {
+app.get('/api/metrics', async (req, res) => {
   try {
     res.set('Content-Type', promClient.register.contentType);
     res.end(await promClient.register.metrics());
