@@ -89,7 +89,7 @@ const leak = [];
 app.get('/api/leak', (req, res) => {
   logger.warn('Memory leak triggered manually!');
   setInterval(() => {
-    leak.push(Buffer.alloc(1024 * 1024));
+    leak.push('x'.repeat(1024 * 1024));
   }, 1000);
   res.status(200).json({ success: true, message: 'Memory leak started' });
 });
