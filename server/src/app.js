@@ -26,6 +26,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
+import promClient from 'prom-client';
 
 import workspaceRoutes from './routes/workspaceRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
@@ -34,6 +35,31 @@ import errorHandler from './middleware/errorHandler.js';
 import logger from './utils/logger.js';
 
 const app = express();
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+promClient.collectDefaultMetrics();
+
+const httpRequestDurationMicroseconds = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.1, 0.3, 0.5, 0.7, 1, 3, 5, 7, 10]
+});
+
+app.use((req, res, next) => {
+  const start = process.hrtime();
+  res.on('finish', () => {
+    if (req.path !== '/metrics') {
+      const diff = process.hrtime(start);
+      const durationSeconds = diff[0] + diff[1] / 1e9;
+      const route = req.route ? req.baseUrl + req.route.path : req.path;
+      httpRequestDurationMicroseconds
+        .labels(req.method, route, res.statusCode)
+        .observe(durationSeconds);
+    }
+  });
+  next();
+});
 
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet()); // Sets security-related HTTP headers (CSP, HSTS, X-Frame, etc.)
@@ -93,6 +119,16 @@ app.get('/api/leak', (req, res) => {
     leak.push(crypto.randomBytes(1024 * 1024));
   }, 1000);
   res.status(200).json({ success: true, message: 'Memory leak started' });
+});
+
+// ── Metrics Endpoint ──────────────────────────────────────────────────────────
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', promClient.register.contentType);
+    res.end(await promClient.register.metrics());
+  } catch (ex) {
+    res.status(500).end(ex.message);
+  }
 });
 
 // ── Health Check ──────────────────────────────────────────────────────────────

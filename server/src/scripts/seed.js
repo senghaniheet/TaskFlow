@@ -77,6 +77,27 @@ const buildProjectData = (workspaceIds) => [
     workspace: workspaceIds[1], // Acme Design
     dueDate: new Date('2026-08-01'),
   },
+  {
+    name: 'Migration to Kubernetes',
+    description: 'Migrating legacy monolith into containerized microservices orchestrated by k8s.',
+    status: PROJECT_STATUS.ACTIVE,
+    workspace: workspaceIds[0], // Acme Engineering
+    dueDate: new Date('2026-10-31'),
+  },
+  {
+    name: 'Security Audit & Compliance',
+    description: 'SOC2 Type II compliance audit and penetration testing fixes.',
+    status: PROJECT_STATUS.PLANNING,
+    workspace: workspaceIds[0], // Acme Engineering
+    dueDate: new Date('2027-01-15'),
+  },
+  {
+    name: 'Social Media Campaign Q4',
+    description: 'End of year digital marketing push across social channels.',
+    status: PROJECT_STATUS.PLANNING,
+    workspace: workspaceIds[1], // Acme Design
+    dueDate: new Date('2026-11-30'),
+  },
 ];
 
 // Tasks are defined as a function that receives project _ids
@@ -241,6 +262,44 @@ const buildTaskData = (projectIds) => [
     estimatedHours: 16,
     labels: ['frontend', 'brand', 'marketing'],
     dueDate: new Date('2026-07-15'),
+  },
+
+  // ── Migration to Kubernetes tasks ─────────────────────────────────────────
+  {
+    title: 'Dockerize legacy auth service',
+    description: 'Create multi-stage Dockerfile and helm charts for the old auth system.',
+    status: TASK_STATUS.IN_PROGRESS,
+    priority: TASK_PRIORITY.HIGH,
+    project: projectIds[4],
+    assignedTo: 'alice@acme.com',
+    estimatedHours: 24,
+    loggedHours: 12,
+    labels: ['infrastructure', 'kubernetes', 'docker'],
+  },
+
+  // ── Security Audit & Compliance tasks ──────────────────────────────────────
+  {
+    title: 'Patch critical CVEs in dependencies',
+    description: 'Update vulnerable NPM packages flagged by Snyk audit.',
+    status: TASK_STATUS.TODO,
+    priority: TASK_PRIORITY.CRITICAL,
+    project: projectIds[5],
+    assignedTo: 'dave@acme.com',
+    estimatedHours: 8,
+    labels: ['security', 'maintenance'],
+  },
+
+  // ── Social Media Campaign Q4 tasks ────────────────────────────────────────
+  {
+    title: 'Draft Q4 campaign copy',
+    description: 'Write engaging copy for LinkedIn and Twitter ad creatives.',
+    status: TASK_STATUS.DONE,
+    priority: TASK_PRIORITY.MEDIUM,
+    project: projectIds[6],
+    assignedTo: 'eve@acme.com',
+    estimatedHours: 4,
+    loggedHours: 5,
+    labels: ['marketing', 'copywriting'],
   },
 ];
 
