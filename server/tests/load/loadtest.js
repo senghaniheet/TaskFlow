@@ -14,19 +14,26 @@ export default function () {
             'Content-Type': 'application/json',
         },
     };
-    
-    // 1. Health check endpoint
-    http.get(`${baseUrl}/api/health`, params);
-    sleep(0.5);
 
-    // 2. Fetch Workspaces
-    http.get(`${baseUrl}/api/workspaces`, params);
-    sleep(1);
+    const random = Math.random();
 
-    // 3. Create a Workspace (generates POST traffic)
-    const payload = JSON.stringify({
-        name: `LoadTest-Workspace-${__VU}-${__ITER}`,
-    });
-    http.post(`${baseUrl}/api/workspaces`, payload, params);
-    sleep(1);
-}
+    if (random < 0.40) {
+        // 40% traffic: Fetch Workspaces
+        http.get(`${baseUrl}/api/workspaces`, params);
+    } else if (random < 0.70) {
+        // 30% traffic: Fetch Tasks
+        http.get(`${baseUrl}/api/tasks?project=6a213aa57af298e1ff01abf3`, params);
+    } else if (random < 0.90) {
+        // 20% traffic: Health Check
+        http.get(`${baseUrl}/api/health`, params);
+    } else {
+        // 10% traffic: Create Workspace (generates POST write load)
+        const payload = JSON.stringify({
+            name: `LoadTest-Workspace-${__VU}-${__ITER}`,
+        });
+        http.post(`${baseUrl}/api/workspaces`, payload, params);
+    }
+
+    // Dynamic sleep to space out requests (average 1 second)
+    sleep(Math.random() * 1.5 + 0.25);
+}

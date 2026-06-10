@@ -13,3 +13,8 @@ data:
   JWT_EXPIRES_IN: {{ .Values.api.env.jwtExpiresIn | quote }}
   ALLOWED_ORIGINS: {{ .Values.api.env.allowedOrigins | quote }}
   DISABLE_RATE_LIMIT: {{ .Values.api.env.disableRateLimit | default "false" | quote }}
+  {{- if eq .Values.api.env.otelEnabled "true" }}
+  NODE_OPTIONS: "--import ./src/instrumentation.js"
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.api.env.otelExporterOtlpEndpoint | quote }}
+  OTEL_SERVICE_NAME: "taskflow-api"
+  {{- end }}

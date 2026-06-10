@@ -35,6 +35,8 @@ api:
     allowedOrigins: "http://localhost:8080,http://taskflow.local"
     jwtSecret: ""
     disableRateLimit: "true"
+    otelEnabled: "true"
+    otelExporterOtlpEndpoint: "http://tempo.monitoring.svc.cluster.local:4317"
   resources:
     requests:
       cpu: 200m
