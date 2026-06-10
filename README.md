@@ -28,6 +28,9 @@ TaskFlow is a production-grade SaaS Project Management and Task Tracking boilerp
 - **Docker & Docker Compose** (Local containerized orchestration)
 - **Kubernetes + Helm** (Production-grade orchestration)
 - **Prometheus + Grafana** (Metrics, dashboards, and alerting)
+- **Loki + Promtail** (Log aggregation — structured JSON log shipping from all pods)
+- **Grafana Tempo** (Distributed tracing backend)
+- **OpenTelemetry SDK** (Auto-instrumented trace & span generation in the Node.js API)
 - **GitHub Actions** (CI/CD — build & push to GHCR on every merge to `main`)
 
 ---
@@ -54,7 +57,11 @@ TaskFlow is a production-grade SaaS Project Management and Task Tracking boilerp
 │   │   ├── models/         # Mongoose Schemas (Task, Project, Workspace)
 │   │   ├── routes/         # Express endpoint definitions
 │   │   ├── scripts/        # Standalone operations (migrate.js, seed.js)
-│   │   └── utils/          # Logger, Standard API Responses
+│   │   ├── utils/          # Logger, Standard API Responses
+│   │   └── instrumentation.js  # OpenTelemetry SDK bootstrap (tracing)
+│   ├── tests/load/
+│   │   ├── loadtest.js         # k6 load test script (200 VUs, 5 min)
+│   │   └── loadtest-pod.yaml   # Kubernetes Pod spec to run k6 inside the cluster
 │   └── Dockerfile          # Secure, non-root production Node.js container
 │
 ├── helm/
@@ -62,13 +69,15 @@ TaskFlow is a production-grade SaaS Project Management and Task Tracking boilerp
 │   │   ├── Chart.yaml
 │   │   ├── values.yaml
 │   │   └── templates/      # Deployment, StatefulSet, HPA, PDB, Ingress, etc.
+│   │       └── tempo-datasource.yaml  # Auto-provisions Tempo datasource in Grafana
 │   ├── monitoring/         # Helm values for kube-prometheus-stack
 │   │   └── values.yaml
 │   └── FailureTest/        # YAML examples for failure scenarios (CrashLoopBackOff, etc.)
 │
 ├── monitoring/
-│   ├── taskflow-dashboard-import.json   # Grafana dashboard (import this)
-│   └── prometheus-alert-rule.yaml       # PrometheusRule for CPU/memory alerts
+│   ├── taskflow-dashboard-import.json       # Grafana metrics dashboard (import)
+│   ├── taskflow-backend-observability.json  # Grafana log dashboard with level filter
+│   └── prometheus-alert-rule.yaml           # PrometheusRule for CPU/memory alerts
 │
 ├── .github/workflows/
 │   └── deploy.yml          # GitHub Actions CI/CD — build & push Docker images
@@ -244,9 +253,9 @@ helm uninstall taskflow --namespace taskflow
 
 ---
 
-## 📊 Monitoring Setup (Prometheus + Grafana)
+## 📊 Monitoring Setup (Prometheus + Grafana + Loki + Tempo)
 
-> 📖 [Prometheus concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#8-prometheus--metrics-collection) | [Grafana guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#9-grafana--dashboards--visualization) | [PromQL reference](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#10-promql--querying-metrics)
+> 📖 [Prometheus concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#8-prometheus--metrics-collection) | [Grafana guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#9-grafana--dashboards--visualization) | [PromQL reference](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#10-promql--querying-metrics) | [Log Aggregation & Tracing](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-6-log-aggregation-loki--promtail)
 
 ### Step 1 — Install kube-prometheus-stack
 
@@ -265,9 +274,42 @@ helm install monitoring prometheus-community/kube-prometheus-stack \
 kubectl get pods -n monitoring -w
 ```
 
-### Step 2 — Access Prometheus
+### Step 2 — Install Loki (Log Aggregation)
 
-> 📖 [Understanding Prometheus metrics](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#key-metric-sources)
+```bash
+# Add Grafana Helm repo
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+# Install Loki + Promtail (ships pod logs to Loki automatically)
+helm install loki-stack grafana/loki-stack \
+  --namespace monitoring \
+  --set promtail.enabled=true \
+  --set loki.enabled=true
+
+# Verify
+kubectl get pods -n monitoring | grep loki
+```
+
+Access Loki directly (for API testing):
+```bash
+kubectl port-forward svc/loki-stack -n monitoring 3100:3100
+```
+
+### Step 3 — Install Grafana Tempo (Distributed Tracing)
+
+```bash
+# Install Tempo in single-binary mode
+helm install tempo grafana/tempo \
+  --namespace monitoring
+
+# Verify Tempo is running
+kubectl get pods -n monitoring | grep tempo
+```
+
+Tempo is automatically provisioned as a Grafana datasource via the `taskflow-tempo-datasource` ConfigMap deployed by the Helm chart.
+
+### Step 4 — Access Prometheus
 
 ```bash
 kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 9090:9090
@@ -275,7 +317,6 @@ kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 909
 
 Open `http://localhost:9090` → Go to **Graph** tab to run PromQL queries.
 
-**Try these queries to verify your app is being monitored:**
 ```promql
 # Are TaskFlow pods visible?
 kube_pod_info{namespace="taskflow"}
@@ -287,10 +328,10 @@ sum(rate(container_cpu_usage_seconds_total{namespace="taskflow", container="api"
 container_memory_working_set_bytes{namespace="taskflow", container="api"} / 1024 / 1024
 ```
 
-### Step 3 — Access Grafana
+### Step 5 — Access Grafana
 
 ```bash
-kubectl port-forward svc/monitoring-grafana -n monitoring 3000:80
+kubectl port-forward svc/monitoring-grafana -n monitoring 8080:80
 ```
 
 **Get the admin password (PowerShell):**
@@ -299,15 +340,14 @@ $encoded = kubectl get secret monitoring-grafana -n monitoring -o jsonpath="{.da
 [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encoded))
 ```
 
-Login at `http://localhost:3000` → Username: `admin`
+Login at `http://localhost:8080` → Username: `admin`
 
-### Step 4 — Import the TaskFlow Dashboard
+### Step 6 — Import the TaskFlow Dashboards
 
+**Metrics Dashboard:**
 1. In Grafana, go to **Dashboards → Import**
-2. Click **Upload JSON file**
-3. Select `monitoring/taskflow-dashboard-import.json`
-4. Select the **Prometheus** data source
-5. Click **Import**
+2. Click **Upload JSON file** → Select `monitoring/taskflow-dashboard-import.json`
+3. Select the **Prometheus** data source → **Import**
 
 The dashboard includes:
 - 📦 **Overview** — Live pod counts (API, Web, MongoDB, Total)
@@ -315,18 +355,59 @@ The dashboard includes:
 - ⚡ **CPU & Autoscaling** — Per-pod CPU, HPA scale events, utilization %
 - 🧠 **Memory** — Per-pod memory usage, leak detection trend
 
-### Step 5 — Apply Alert Rules
+**Log Dashboard (Loki):**
+1. Import `monitoring/taskflow-backend-observability.json`
+2. This dashboard provides a unified log view across all pods with:
+   - **Namespace** and **Container** dropdown filters
+   - **Log Level** filter (`http`, `info`, `warn`, `error`) — intelligently parses both structured JSON API logs and plain Nginx access logs
 
-> 📖 [Alert rules explained](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#11-alert-rules)
+### Step 7 — Apply Alert Rules
 
 ```bash
 kubectl apply -f monitoring/prometheus-alert-rule.yaml
-
-# Verify Prometheus picked it up
 kubectl get prometheusrule -n monitoring
 ```
 
 Check active alerts at `http://localhost:9090/alerts`.
+
+---
+
+## 🔗 Distributed Tracing (OpenTelemetry + Grafana Tempo)
+
+> 📖 [Distributed Tracing Guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-7-distributed-tracing-opentelemetry--tempo)
+
+The Node.js API is fully instrumented with OpenTelemetry auto-instrumentation. Every HTTP request and MongoDB query generates a **trace** that is exported to Grafana Tempo via OTLP gRPC.
+
+### Architecture
+```
+Node.js API (Express + Mongoose)
+      ↓
+OpenTelemetry SDK (auto-instrumentation)
+      ↓  gRPC port 4317
+Grafana Tempo  (tempo.monitoring.svc.cluster.local)
+      ↓
+Grafana Explore  →  Search by Service: taskflow-api
+```
+
+### How It Works
+- [`server/src/instrumentation.js`](./server/src/instrumentation.js) initialises the `NodeSDK` with the OTLP gRPC exporter.
+- It is loaded as an **ESM hook** via `NODE_OPTIONS=--import ./src/instrumentation.js` injected by the Helm ConfigMap.
+- Every log line in the API now includes `trace_id` and `span_id` fields — allowing you to jump from a Loki log entry directly to the corresponding Tempo trace.
+
+### Explore Traces in Grafana
+
+1. Go to `http://localhost:8080/explore`
+2. Select the **Tempo** datasource
+3. Search by **Service Name**: `taskflow-api`
+4. Click any `trace_id` to see the full span waterfall (HTTP → MongoDB)
+
+### Key Environment Variables
+
+| Variable | Value |
+|----------|-------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://tempo.monitoring.svc.cluster.local:4317` |
+| `OTEL_SERVICE_NAME` | `taskflow-api` |
+| `NODE_OPTIONS` | `--import ./src/instrumentation.js` |
 
 ---
 
@@ -346,24 +427,34 @@ The API and Web services both have Horizontal Pod Autoscalers configured in [`he
 kubectl get hpa -n taskflow -w
 ```
 
-**Trigger autoscaling with a load test:**
+**Trigger autoscaling with the k6 load test pod:**
 
 > 📖 [Load testing guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#12-load-testing--autoscaling-validation)
 
 ```bash
-# Start load generator
-kubectl run load-generator \
-  --image=busybox \
-  --restart=Never \
-  -n taskflow \
-  --command -- sh -c "while true; do wget -q -O- http://api:5000/api/health; done"
+# Create the loadtest ConfigMap (first time only)
+kubectl create configmap loadtest-config \
+  --from-file=loadtest.js=server/tests/load/loadtest.js \
+  -n taskflow
+
+# Launch the k6 load test pod (200 VUs, 5 minutes)
+kubectl apply -f server/tests/load/loadtest-pod.yaml
+
+# Watch k6 progress
+kubectl logs k6-load-generator -n taskflow -f
 
 # Watch pods scale up in a separate terminal
-kubectl get pods -n taskflow -w
+kubectl get hpa -n taskflow -w
 
 # Clean up when done
-kubectl delete pod load-generator -n taskflow
+kubectl delete pod k6-load-generator -n taskflow
 ```
+
+The k6 load test targets these endpoints with randomised traffic:
+- **40%** — `GET /api/workspaces` (DB read)
+- **30%** — `GET /api/tasks` (DB read with filter)
+- **20%** — `GET /api/health` (lightweight health check)
+- **10%** — `POST /api/workspaces` (DB write)
 
 ---
 
@@ -449,6 +540,10 @@ npm run test
 | `JWT_SECRET` | ✅ | — | Cryptographically secure random string |
 | `JWT_EXPIRES_IN` | — | `1d` | Token expiry (e.g. `7d`, `24h`) |
 | `ALLOWED_ORIGINS` | ✅ | — | CORS whitelist (comma-separated URLs) |
+| `NODE_OPTIONS` | — | — | Set to `--import ./src/instrumentation.js` to enable OpenTelemetry tracing |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | — | — | gRPC endpoint for Tempo (e.g. `http://tempo.monitoring.svc.cluster.local:4317`) |
+| `OTEL_SERVICE_NAME` | — | — | Service name tag for traces (e.g. `taskflow-api`) |
+| `LOG_LEVEL` | — | `info` | Winston log level (`http`, `info`, `warn`, `error`) |
 
 ### Client (React / Vite)
 
@@ -480,6 +575,8 @@ npm run test
 | Memory leak detection | [Section 13 — Memory](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#13-memory-leak-detection) |
 | CI/CD with GitHub Actions | [Section 14 — CI/CD](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#14-cicd-with-github-actions) |
 | kubectl & Helm cheatsheet | [Section 15 — Cheatsheet](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#15-quick-reference-cheatsheet) |
+| **Log Aggregation with Loki** | [Phase 6 — Loki & Promtail](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-6-log-aggregation-loki--promtail) |
+| **Distributed Tracing with Tempo** | [Phase 7 — OpenTelemetry & Tempo](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-7-distributed-tracing-opentelemetry--tempo) |
 
 ---
 

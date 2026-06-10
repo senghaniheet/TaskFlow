@@ -245,6 +245,232 @@ What happens when a pod keeps crashing on startup due to a bad config or broken 
 
 ---
 
+## 🪵 Phase 6: Log Aggregation (Loki + Promtail)
+
+Metrics tell you *what* is happening (high CPU, 500 errors). Logs tell you *why*. We use **Loki** as the log database and **Promtail** as the log-shipping agent that automatically collects stdout/stderr from every pod.
+
+### Why not just `kubectl logs`?
+
+`kubectl logs` only lets you see logs from one pod at a time. In production you have 3+ API replicas. Loki aggregates logs from **all** pods into a single queryable stream.
+
+### 🧠 Challenge 4: Set Up Loki and Query Logs
+
+**Step 1: Install the Stack**
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+helm install loki-stack grafana/loki-stack \
+  --namespace monitoring \
+  --set promtail.enabled=true \
+  --set loki.enabled=true
+```
+
+Promtail runs as a **DaemonSet** — one agent pod per node that tails `/var/log/pods/` and ships everything to Loki.
+
+**Step 2: Add Loki as a Grafana Datasource**
+1. In Grafana, go to **Connections → Data sources → Add new data source**
+2. Select **Loki**
+3. Set URL: `http://loki-stack.monitoring.svc.cluster.local:3100`
+4. Click **Save & Test**
+
+**Step 3: Query Logs with LogQL**
+
+Go to Grafana **Explore** and select the Loki datasource. Try these queries:
+
+```logql
+# All logs from the API container
+{namespace="taskflow", container="api"}
+
+# Only error logs (structured JSON API logs)
+{namespace="taskflow", container="api"} | json | level="error"
+
+# All HTTP request logs (Morgan access logs)
+{namespace="taskflow", container="api"} | json | level="http"
+
+# Search for a specific trace_id across all pods
+{namespace="taskflow"} | json | trace_id="abc123..."
+```
+
+**The Journey Lesson:** Notice that the API logs are structured JSON (`{"level":"http","message":"...","trace_id":"...","span_id":"..."}`). This is why we use **Winston** with JSON format — it makes LogQL filtering trivially easy.
+
+### 🧠 Challenge 5: Build the Log Dashboard with a Level Filter
+
+The raw Explore view is useful, but a dashboard with dropdown filters lets anyone on your team query logs without knowing LogQL.
+
+**The Problem:** The API container writes structured JSON logs with `level` fields. But the Web (Nginx) container writes plain text access logs with no `level` field.
+
+**The Solution — a LogQL pipeline that handles both:**
+
+```logql
+{namespace="$namespace", container="$container"}
+| json
+| line_format "{{.log}}"
+| json
+| regexp "(?P<http_match>HTTP/1\..+ \d{3})"
+| label_format level="{{if .level}}{{.level}}{{else if .http_match}}http{{else}}info{{end}}"
+| level =~ "(?i)$level"
+```
+
+**How it works:**
+1. `| json` + `| line_format "{{.log}}"` — strips the container runtime wrapper to get the raw log line.
+2. Second `| json` — extracts `level` from structured JSON logs.
+3. `| regexp` — detects HTTP access log lines by pattern.
+4. `| label_format` — synthesises a unified `level` label for both log types.
+5. `| level =~ "$level"` — filters by the dashboard variable (All/http/info/warn/error).
+
+**Variables to create in Grafana:**
+- `namespace` — type: `Label values`, label: `namespace`, datasource: Loki
+- `container` — type: `Label values`, label: `container`, datasource: Loki  
+- `level` — type: `Custom`, values: `.*,http,info,warn,error` (first is the "All" wildcard)
+
+---
+
+## 🔍 Phase 7: Distributed Tracing (OpenTelemetry + Tempo)
+
+Logs tell you *what* happened on one service. Traces tell you *the full journey* of a single request across all services. When a user hits a slow API endpoint, tracing shows you exactly which database query or downstream call caused it.
+
+### The Observability Pillars
+
+| Signal | Tool | Answers |
+|--------|------|---------|
+| **Metrics** | Prometheus | *How much?* (CPU, error rate, latency percentiles) |
+| **Logs** | Loki | *What happened?* (error messages, stack traces) |
+| **Traces** | Tempo | *Where is it slow?* (which span in the call chain) |
+
+### How OpenTelemetry Works
+
+OpenTelemetry (OTel) is a vendor-neutral observability framework. It provides:
+- **API** — the interface your code calls to create spans
+- **SDK** — the runtime that processes and exports spans
+- **Auto-instrumentation** — hooks into popular libraries (Express, Mongoose, HTTP) **without any code changes**
+
+The export flow:
+
+```
+Node.js API  →  OTel SDK  →  OTLP Exporter  →  Grafana Tempo  →  Grafana Explore
+              (in-process)  (gRPC port 4317)   (stores traces)   (visualises)
+```
+
+### 🧠 Challenge 6: Instrument the Node.js API
+
+**Step 1: Install Tempo**
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+helm install tempo grafana/tempo --namespace monitoring
+```
+
+**Step 2: Install OTel dependencies**
+```bash
+cd server
+npm install \
+  @opentelemetry/api \
+  @opentelemetry/sdk-node \
+  @opentelemetry/auto-instrumentations-node \
+  @opentelemetry/exporter-trace-otlp-grpc \
+  @grpc/grpc-js
+```
+
+> ⚠️ **Dependency Gotcha:** `@opentelemetry/auto-instrumentations-node` includes `@opentelemetry/instrumentation-mongodb`. If your Mongoose version uses `mongodb` driver **6.8.0+**, you'll get `MongoRuntimeError: Unexpected null cursor id` — a known upstream bug. **Fix:** Lock `mongoose` to `8.4.1` which uses `mongodb@6.6.2` in `package.json`.
+
+**Step 3: Create the bootstrap file**
+
+Create `server/src/instrumentation.js`:
+
+```javascript
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
+
+const traceExporter = new OTLPTraceExporter();
+// Endpoint and service name come from env vars:
+// OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME
+
+const sdk = new NodeSDK({
+  traceExporter,
+  instrumentations: [
+    getNodeAutoInstrumentations({
+      '@opentelemetry/instrumentation-fs': { enabled: false }, // too noisy
+    }),
+  ],
+});
+
+sdk.start();
+console.log('🤖 OpenTelemetry SDK initialized successfully');
+
+process.on('SIGTERM', () => {
+  sdk.shutdown().finally(() => process.exit(0));
+});
+```
+
+**Step 4: The ESM Hook Problem**
+
+Because this project uses ES Modules (`"type": "module"` in `package.json`), you **cannot** just import `instrumentation.js` at the top of `index.js`. OTel must load **before** any other module to hook into them.
+
+The solution: Node.js `--import` flag, which runs a module before the main entry point.
+
+Set this in the Kubernetes ConfigMap (via `helm/taskflow/templates/api-configmap.yaml`):
+```yaml
+NODE_OPTIONS: "--import ./src/instrumentation.js"
+OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.monitoring.svc.cluster.local:4317"
+OTEL_SERVICE_NAME: "taskflow-api"
+```
+
+**Step 5: Auto-provision Tempo as a Grafana Datasource**
+
+Create `helm/taskflow/templates/tempo-datasource.yaml` as a ConfigMap with label `grafana_datasource: "1"`. Grafana's sidecar container watches for this label and auto-loads it:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskflow-tempo-datasource
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  tempo-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+    - name: Tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.monitoring.svc.cluster.local:3200
+```
+
+**Step 6: Explore Traces**
+
+1. Make some API requests to generate spans:
+   ```bash
+   kubectl port-forward svc/api -n taskflow 5000:5000
+   curl http://localhost:5000/api/health
+   curl http://localhost:5000/api/workspaces
+   ```
+2. Open `http://localhost:8080/explore`
+3. Select **Tempo** datasource
+4. Search by **Service Name**: `taskflow-api`
+5. Click a trace to see the span waterfall: `HTTP GET /api/workspaces → mongoose.find → mongodb.find`
+
+**The Journey Lesson:** Notice how every API log line now contains `trace_id` and `span_id`. This is the **Logs → Traces correlation** pattern — you can spot an error in Loki, copy its `trace_id`, and jump directly to the exact Tempo trace to see the full call chain.
+
+### 🧠 Challenge 7: Run a Real Load Test and Watch the Trace Flood
+
+```bash
+# Create the ConfigMap with the k6 script
+kubectl create configmap loadtest-config \
+  --from-file=loadtest.js=server/tests/load/loadtest.js \
+  -n taskflow
+
+# Launch the k6 pod (200 virtual users for 5 minutes)
+kubectl apply -f server/tests/load/loadtest-pod.yaml
+
+# Watch it run
+kubectl logs k6-load-generator -n taskflow -f
+```
+
+While it runs, open Grafana Explore → Tempo and refresh. You'll see hundreds of traces flooding in, each representing a real HTTP request processed by the cluster.
+
+---
+
 ## 📜 Cheatsheet
 
 ### kubectl Essentials
@@ -261,4 +487,23 @@ kubectl rollout restart deployment/taskflow-api -n taskflow # Force restart all 
 helm install <release> <chart> -n <ns>
 helm upgrade <release> <chart> -n <ns>    # Apply values.yaml changes without downtime
 helm uninstall <release> -n <ns>          # Teardown the whole stack
+```
+
+### LogQL (Loki) Essentials
+```logql
+{namespace="taskflow", container="api"}           # All API logs
+{namespace="taskflow"} | json | level="error"     # Error logs only
+{namespace="taskflow"} | json | trace_id="<id>"   # Find by trace ID
+```
+
+### OTel / Tracing Essentials
+```bash
+# Verify OTel is initialised
+kubectl logs -l app=api -n taskflow | grep "OpenTelemetry SDK"
+
+# Check env vars injected by ConfigMap
+kubectl exec <pod> -n taskflow -- env | grep OTEL
+
+# Port-forward Tempo for direct API access
+kubectl port-forward svc/tempo -n monitoring 3200:3200
 ```
