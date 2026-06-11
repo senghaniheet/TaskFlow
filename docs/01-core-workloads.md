@@ -18,6 +18,26 @@ You interact with:   Deployment / StatefulSet / DaemonSet
 
 You almost never create Pods directly. You create a **Deployment** or **StatefulSet**, which manages Pods for you.
 
+### The Complete Kubernetes Object Map
+
+This diagram shows every resource used in this project and how they connect:
+
+![Kubernetes Architecture — All Objects](../assets/kubernetes-architecture.jpg)
+
+**How to read this diagram:**
+
+- **Top-left legend:** A reference card for every K8s object type. Use it as a cheat sheet — each shape/colour maps to a specific resource kind.
+- **User → Internet → Ingress:** All external traffic enters through the Nginx Ingress Controller, which routes to the correct Service based on path or host.
+- **Inside the Namespace (`my-app`):** This is where your application lives. Notice it's sandboxed — resources in other namespaces can't conflict with these names.
+- **Service → Deployment → Pods:** The API (stateless) side. The Service has a stable ClusterIP (`my-app-svc`, `10.96.12.34`). The Deployment manages 3 identical, interchangeable Pods.
+- **Service → StatefulSet → Pods:** The Database (stateful) side. Each pod (`mydb-0`, `mydb-1`, `mydb-2`) has its own identity and its own PVC → PV chain. Note how each pod gets *its own separate* PersistentVolumeClaim — not shared.
+- **Config & Secrets (top-right):** ConfigMap and Secret objects live outside pods but are injected into them as environment variables. They are referenced by the Deployment and StatefulSet.
+- **HPA (right side):** Watches the Deployment. When CPU/memory crosses the target threshold, it patches `replicas`. Min: 2, Max: 10 in this example.
+- **PDB (right side):** Guards the Deployment. During node drains or upgrades, ensures at least N pods remain available at all times.
+- **Namespace (bottom-left):** A visual reminder that the Namespace object is what creates the boundary — it is itself a K8s resource you must create first.
+
+> **The key pattern:** Every connection in this diagram is managed by a Kubernetes **controller** watching for state changes. Nothing is wired up manually — labels + selectors do the binding.
+
 ---
 
 ## Pod — The Atomic Unit

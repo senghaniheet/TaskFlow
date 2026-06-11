@@ -22,11 +22,64 @@ No single signal answers all three questions. A 500 error in metrics tells you s
 
 ---
 
-## Full Architecture Diagram
+## Full Stack Observability Diagram
 
-![Kubernetes Observability Architecture](../assets/observability-architecture.png)
+This diagram shows the **complete production observability architecture** — from a user's browser request all the way to Grafana dashboards and PagerDuty alerts.
 
----
+![Observability Architecture](../assets/Observability-Architecture.png)
+
+### Reading the Diagram
+
+The diagram is divided into four horizontal layers. Reading left to right, top to bottom:
+
+#### Layer 1 — The Application (Application Namespace)
+The `taskflow` namespace runs three services:
+- **React** (Frontend) — serves the UI. Talks to the Node API over HTTP(S).
+- **Node API** (Backend) — the Express.js server. The most heavily instrumented component. Emits all three observability signals.
+- **MongoDB** (Database) — the StatefulSet database. Connected to the API via TCP port 27017.
+
+#### Layer 2 — The Collection Layer (Cluster Add-ons)
+These are Kubernetes-native collectors that transparently intercept and ship telemetry data **without any code changes to your app**:
+
+| Add-on | Collects | Ships To |
+|--------|---------|---------|
+| **Kubelet / cAdvisor** | Pod CPU, memory, network metrics from the node | Prometheus (pull) |
+| **Fluent Bit / Promtail** | stdout/stderr logs from every container via `/var/log/pods/` | Loki (push) |
+| **OpenTelemetry** | Distributed trace spans from the Node API via gRPC | Tempo (push, OTLP) |
+
+#### Layer 3 — The Storage Layer (Observability Namespace)
+Three purpose-built backends, each optimised for its signal type:
+
+- **Prometheus** — time-series metrics store. Uses a **pull** model (scrapes `/api/metrics` every 5s). Feeds the Alertmanager when rules fire.
+- **Loki** — log aggregation. Uses a **push** model (Promtail pushes logs). Indexes only labels, not content — cost-efficient at scale.
+- **Tempo** — distributed trace store. Accepts spans over **OTLP/gRPC (port 4317)**. Stores each request as a tree of spans showing latency per operation.
+- **Alertmanager** — receives firing alerts from Prometheus and routes them to Email, Slack, PagerDuty, or Webhook.
+
+#### Layer 4 — The Visualisation Layer
+- **Grafana** — the single pane of glass. It queries Prometheus (PromQL), Loki (LogQL), and Tempo (TraceQL) and renders everything in one UI with dashboards, explore views, and alert panels.
+- **Users (Dev/Ops/SRE)** — access Grafana to investigate incidents, view dashboards, and acknowledge alerts.
+
+#### Bottom — Load Testing
+- **k6** runs as a Kubernetes Pod inside the cluster. It generates synthetic HTTP traffic to the app, producing real load that you can observe across all three pillars simultaneously.
+
+### The Complete Flow for One Request
+
+```
+1. User accesses the app via browser (HTTPS)
+2. React calls Node API (HTTP)
+3. Node API reads/writes MongoDB (TCP 27017)
+
+4. Simultaneously:
+   ├── OTel SDK creates spans → gRPC → Tempo        (Traces)
+   ├── Winston logs to stdout → Promtail → Loki      (Logs)
+   └── prom-client increments counters ← Prometheus  (Metrics)
+
+5. Prometheus evaluates alert rules
+   └── Rule fires → Alertmanager → Slack/Email/PagerDuty
+
+6. Grafana queries all three backends
+   └── Dev/Ops sees unified dashboards and explores incidents
+```
 
 ## Component Reference
 

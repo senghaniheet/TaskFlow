@@ -42,39 +42,28 @@ Kubernetes figures out *how* to make that true. If a server dies, it reschedules
 
 ## 🏗️ Cluster Anatomy
 
-A Kubernetes cluster has two types of machines:
+A Kubernetes cluster has two types of machines: the **Control Plane** that makes decisions, and **Worker Nodes** that run your workloads.
 
-```
-┌─────────────────── Kubernetes Cluster ──────────────────────┐
-│                                                              │
-│   ┌──────────────────────────────────────┐                  │
-│   │         Control Plane (Master)        │                  │
-│   │                                       │                  │
-│   │  ┌────────────┐  ┌────────────────┐  │                  │
-│   │  │ API Server  │  │      etcd      │  │                  │
-│   │  │ (kube API)  │  │ (source of     │  │                  │
-│   │  │             │  │  truth / DB)   │  │                  │
-│   │  └────────────┘  └────────────────┘  │                  │
-│   │  ┌────────────┐  ┌────────────────┐  │                  │
-│   │  │  Scheduler  │  │   Controller   │  │                  │
-│   │  │ (places     │  │   Manager      │  │                  │
-│   │  │  pods on    │  │ (watches state)│  │                  │
-│   │  │  nodes)     │  │                │  │                  │
-│   │  └────────────┘  └────────────────┘  │                  │
-│   └──────────────────────────────────────┘                  │
-│                         │ instructions                        │
-│          ┌──────────────┼──────────────┐                     │
-│          ▼              ▼              ▼                     │
-│   ┌──────────┐  ┌──────────┐  ┌──────────┐                  │
-│   │  Node 1  │  │  Node 2  │  │  Node 3  │                  │
-│   │ ┌──────┐ │  │ ┌──────┐ │  │ ┌──────┐ │                  │
-│   │ │kubelet│ │  │ │kubelet│ │  │ │kubelet│ │                 │
-│   │ │kproxy │ │  │ │kproxy │ │  │ │kproxy │ │                 │
-│   │ │ Pods  │ │  │ │ Pods  │ │  │ │ Pods  │ │                 │
-│   │ └──────┘ │  │ └──────┘ │  │ └──────┘ │                  │
-│   └──────────┘  └──────────┘  └──────────┘                  │
-└──────────────────────────────────────────────────────────────┘
-```
+![Kubernetes Cluster Architecture](../assets/KubernatesCluster.png)
+
+**Reading this diagram from top to bottom:**
+
+The **Control Plane (Master)** is the brain of the cluster. You never run your application here — it exists purely to manage the workers. It has four components:
+
+- **API Server** — every action (kubectl apply, helm install, pod creation) goes through here first. It's a REST API that validates your YAML and writes it to etcd.
+- **etcd** — a distributed key-value store that is the single source of truth. It stores *every* resource definition in the cluster. If etcd is lost, the cluster is lost.
+- **Scheduler** — watches for pods with no assigned node and picks the best node based on available resources and affinity rules.
+- **Controller Manager** — a control loop. It continuously compares *current state* vs *desired state*. If you asked for 3 API replicas and one dies, the Controller Manager notices and tells the Scheduler to create a new one.
+
+The **arrow labelled "instructions"** represents the API Server pushing pod specifications down to each node's Kubelet.
+
+Each **Worker Node** runs three things:
+
+- **kubelet** — the local agent. It receives pod specs from the API Server and instructs the container runtime (containerd) to start/stop containers. It also reports node health back up.
+- **kproxy** (kube-proxy) — manages the iptables/IPVS rules that make Services work. When you call `mongo:27017` from the API pod, kube-proxy is the reason traffic lands on the right pod.
+- **Pods** — your actual workloads. Multiple pods run on each node, depending on how much CPU/memory each pod requests.
+
+> **In Minikube:** all four Control Plane components AND your worker pods share the same single VM. This is fine for learning but means resource contention if you over-deploy.
 
 ### Control Plane Components
 
