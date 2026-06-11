@@ -289,3 +289,38 @@ kubectl logs -l app=api -n taskflow -f --max-log-requests=10
 ---
 
 **Next:** [03 — Configuration: ConfigMaps and Secrets →](./03-configuration.md)
+
+
+## Raw YAML Reference
+
+### [04-service-clusterip.yaml](../k8s-scripts/04-service-clusterip.yaml) — Internal Networking
+**WHAT IS A SERVICE?**
+Pods come and go (IPs change every time). A Service gives your pods a STABLE IP and DNS name that never changes.
+
+**CLUSTERIP (default):**
+  - Creates a virtual IP that is only reachable INSIDE the cluster
+  - Acts as a load balancer across all matching pods
+
+**HEADLESS SERVICE:**
+A Headless Service (`clusterIP: None`) does NOT create a virtual IP. Instead, DNS returns the direct IP of each pod. Required by StatefulSets for stable per-pod DNS (e.g. `mongo-0.mongo.taskflow.svc`).
+
+### [05-service-nodeport.yaml](../k8s-scripts/05-service-nodeport.yaml) — External Access
+**NODEPORT:**
+Exposes the Service on a static port (30000-32767) on EVERY node.
+External traffic → NodeIP:NodePort → Service → Pod
+
+When to use NodePort:
+  - ✅ Development / Minikube (quick external access without Ingress)
+  - ✅ Non-HTTP protocols (gRPC, TCP)
+  - ❌ Production: use LoadBalancer or Ingress instead
+
+### [06-ingress.yaml](../k8s-scripts/06-ingress.yaml) — HTTP Routing
+**WHAT IS AN INGRESS?**
+An Ingress is an API object that manages external HTTP/HTTPS access to services inside the cluster. It acts as a SMART REVERSE PROXY.
+
+**WHY INGRESS OVER NodePort?**
+  - NodePort: one port per service (messy, limited range)
+  - Ingress: ONE entry point for ALL services, routed by path/host
+
+**HOW IT WORKS:**
+Browser → DNS → Nginx Ingress Controller → Ingress rules → route to correct Service → Pod

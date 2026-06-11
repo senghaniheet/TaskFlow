@@ -277,3 +277,28 @@ helm upgrade taskflow ./helm/taskflow --set api.env.otelEnabled="true"
 ---
 
 **Next:** [04 — Storage: PV, PVC, and StorageClass →](./04-storage.md)
+
+
+## Raw YAML Reference
+
+### [07-configmap.yaml](../k8s-scripts/07-configmap.yaml) — Non-Sensitive Config
+**WHAT IS A CONFIGMAP?**
+A ConfigMap stores key-value pairs of non-sensitive configuration data. It decouples config from container images.
+
+**GOLDEN RULE:**
+  - ConfigMap  → non-sensitive config (`NODE_ENV`, `PORT`)
+  - Secret     → sensitive credentials (`JWT_SECRET`, `MONGO_URI`)
+
+**THE CHECKSUM TRICK:**
+When a ConfigMap changes, pods won't restart automatically. The Helm checksum annotation forces a rolling restart so the new configuration takes effect.
+
+### [08-secret.yaml](../k8s-scripts/08-secret.yaml) — Sensitive Credentials
+**WHAT IS A SECRET?**
+A Secret is like a ConfigMap but for sensitive data. It stores data as base64-encoded strings.
+
+**IMPORTANT: Base64 is ENCODING, not ENCRYPTION.**
+Anyone with cluster access can decode it! Real security in production uses Sealed Secrets, HashiCorp Vault, or Cloud Secrets Managers.
+
+**TYPES SHOWN HERE:**
+  - `stringData`: write plaintext → K8s base64-encodes it for you
+  - `data`: you must pre-encode with: `echo -n "value" | base64`

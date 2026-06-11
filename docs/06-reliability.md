@@ -300,3 +300,29 @@ kubectl describe pod <api-pod-name> -n taskflow | grep -A 10 "Limits\|Requests"
 ---
 
 **Next:** [07 — Observability Architecture →](./07-observability-arch.md)
+
+
+## Raw YAML Reference
+
+### [10-hpa.yaml](../k8s-scripts/10-hpa.yaml) — Autoscaling
+**WHAT IS HPA?**
+HPA automatically scales the number of pod replicas based on observed CPU/memory utilisation (or custom metrics).
+
+**THE SCALING LOOP:**
+  1. `metrics-server` scrapes CPU/memory from every pod every 15s
+  2. HPA controller reads metrics every 15s
+  3. Calculates: `desiredReplicas = ceil(currentReplicas × (currentUsage / targetUsage))`
+  4. Patches the Deployment's replicas field
+
+**COOLDOWN PERIODS:**
+Scale-up waits 3 minutes after last scale-up before scaling up again. Scale-down waits 5 minutes (default) — more conservative to prevent flapping.
+
+### [11-pdb.yaml](../k8s-scripts/11-pdb.yaml) — Disruption Budgets
+**WHAT IS A PDB?**
+A PodDisruptionBudget limits how many pods of an application can be voluntarily disrupted at the same time.
+
+**VOLUNTARY vs INVOLUNTARY DISRUPTION:**
+  - **Voluntary (PDB applies):** Node drain (`kubectl drain`) for maintenance, Node upgrade
+  - **Involuntary (PDB does NOT apply):** Node hardware failure, OOMKilled, Pod crash
+
+With 3 API replicas and `maxUnavailable: 1`, a node drain can take down AT MOST 1 pod at a time. The drain blocks until a replacement pod is Running, ensuring no downtime during maintenance.

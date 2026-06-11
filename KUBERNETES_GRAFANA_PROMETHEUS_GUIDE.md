@@ -133,8 +133,8 @@ To load the custom dashboards in Grafana (`Dashboards -> Import`):
 
 If you are learning Kubernetes for the first time, Helm's templating (`{{ .Values... }}`) can be confusing. 
 
-To bridge this gap, look at the [`k8s-scripts/`](./k8s-scripts/) folder. It contains the **pure, un-templated, raw YAML** for every component in this project, heavily annotated with explanations. 
+To bridge this gap, the curriculum chapters (such as `01-core-workloads.md`) include a **Raw YAML Reference** section at the bottom. These explain the pure, un-templated Kubernetes configurations found in the [`k8s-scripts/`](./k8s-scripts/) folder.
 
-Read the raw YAML in `k8s-scripts/` first to understand *what* Kubernetes wants, then look at `helm/taskflow/templates/` to understand *how* Helm generates it.
+Read the raw YAML in `k8s-scripts/` and the explanations in the curriculum first to understand *what* Kubernetes wants, then look at `helm/taskflow/templates/` to understand *how* Helm generates it.
 
 Happy scaling!

@@ -573,7 +573,7 @@ npm run test
 | 10 — Distributed Tracing: OpenTelemetry and Tempo | [docs/10-tracing.md](./docs/10-tracing.md) |
 | 11 — CI/CD: Automated Deployments | [docs/11-cicd.md](./docs/11-cicd.md) |
 | 12 — Load Testing: Validating Autoscaling | [docs/12-load-testing.md](./docs/12-load-testing.md) |
-| Raw YAML Examples (Annotated) | [k8s-scripts/](./k8s-scripts/) |
+| Raw YAML Examples | [k8s-scripts/](./k8s-scripts/) |
 
 ---
 

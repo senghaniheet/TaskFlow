@@ -262,3 +262,64 @@ kill 1  # Kill the main process
 ---
 
 **Next:** [02 — Networking: Services, Ingress, and DNS →](./02-networking.md)
+
+
+## Raw YAML Reference
+
+Below is the annotated raw YAML equivalent of the workloads discussed in this chapter. This shows the exact Kubernetes API definitions before Helm templating.
+
+![Kubernetes Architecture](../assets/kubernetes-architecture.jpg)
+
+### [00-namespace.yaml](../k8s-scripts/00-namespace.yaml) — Namespaces
+**WHAT IS A NAMESPACE?**
+A Namespace is a virtual cluster inside a physical cluster.
+Think of it like folders on your computer:
+  - `/home/user/work/`   → namespace: `production`
+  - `/home/user/play/`   → namespace: `staging`
+
+Resources in different namespaces are isolated:
+  - A Service named `api` in `taskflow` won't conflict with a Service named `api` in `monitoring`.
+  - RBAC policies can be scoped per-namespace.
+  - Resource quotas can be applied per-namespace.
+
+**IN THIS PROJECT:**
+  - `taskflow`   → the app (API, Web, MongoDB)
+  - `monitoring` → observability (Prometheus, Grafana, Loki, Tempo)
+  - `ingress-nginx` → the Nginx Ingress Controller
+
+### [01-pod.yaml](../k8s-scripts/01-pod.yaml) — The Atomic Unit
+**WHAT IS A POD?**
+A Pod is the smallest deployable unit in Kubernetes.
+It wraps one or more containers that:
+  - Share the same network namespace (same IP, same `localhost`)
+  - Share the same storage volumes
+  - Are always co-located on the same node
+
+**THE GOLDEN RULE:** Never deploy naked Pods in production.
+If this Pod crashes, Kubernetes won't restart it. Use a Deployment instead. Every Deployment, StatefulSet, and DaemonSet creates Pods under the hood. Understanding Pods helps you debug what `kubectl describe pod` tells you.
+
+### [02-deployment.yaml](../k8s-scripts/02-deployment.yaml) — Stateless Replicas
+**WHAT IS A DEPLOYMENT?**
+A Deployment manages a ReplicaSet, which in turn manages Pods.
+Think of it as: Deployment → ReplicaSet → Pods
+
+**WHY DEPLOYMENT OVER NAKED POD?**
+  - ✅ **Self-healing:** if a Pod dies, the Deployment creates a new one
+  - ✅ **Scaling:** change replicas: 3 → replicas: 10 instantly
+  - ✅ **Rolling updates:** update image with zero downtime
+  - ✅ **Rollback:** `kubectl rollout undo` if the new version is broken
+
+**ROLLING UPDATE STRATEGY:**
+  - `maxUnavailable: 0`  → never kill old pods before new ones are ready
+  - `maxSurge: 1`        → allow 1 extra pod during the transition
+
+### [03-statefulset.yaml](../k8s-scripts/03-statefulset.yaml) — Stateful Apps
+**WHAT IS A STATEFULSET?**
+A StatefulSet is like a Deployment, but for stateful applications (like MongoDB).
+Key differences vs Deployment:
+  - **Pod names:** fixed (`mongo-0`, `mongo-1`) vs random
+  - **Start order:** sequential (0, then 1, then 2) vs simultaneous
+  - **PVC:** one unique PVC per pod (stable storage) vs shared
+
+**WHY MONGODB NEEDS IT:**
+MongoDB's data directory (`/data/db`) must persist across pod restarts. If Pod `mongo-0` is deleted and recreated, it must mount the SAME PersistentVolume it had before — otherwise the database is gone. StatefulSets guarantee this through their stable pod identity.

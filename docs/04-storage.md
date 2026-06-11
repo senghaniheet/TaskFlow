@@ -253,3 +253,16 @@ ls /tmp/hostpath-provisioner/  # ← Minikube stores PV data here
 ---
 
 **Next:** [05 — Helm: The Package Manager for Kubernetes →](./05-helm.md)
+
+
+## Raw YAML Reference
+
+### [09-pvc.yaml](../k8s-scripts/09-pvc.yaml) — Durable Storage
+**THE STORAGE TRILOGY:**
+  - **PersistentVolume (PV):** A cluster-level storage resource (like a physical hard disk).
+  - **PersistentVolumeClaim (PVC):** A pod's request for storage. Like renting an apartment (you specify size and access mode).
+  - **StorageClass:** A template for dynamically creating PVs on demand.
+
+**ACCESS MODES:**
+  - `ReadWriteOnce (RWO)`: mounted by ONE node at a time (MongoDB's mode)
+  - `ReadWriteMany (RWX)`: mounted by MANY nodes simultaneously
