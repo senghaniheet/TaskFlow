@@ -163,7 +163,6 @@ K8s recreates the pod:
 
 **What would destroy data:**
 - `kubectl delete pvc taskflow-mongo-pvc -n taskflow` (manually delete the PVC)
-- `helm uninstall taskflow --namespace taskflow` (if PVC is deleted with the chart)
 - A StorageClass with `reclaimPolicy: Delete` (auto-deletes PV when PVC is deleted)
 
 ---

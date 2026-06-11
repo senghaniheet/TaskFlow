@@ -107,13 +107,6 @@ metadata:
     environment: production
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/namespace.yaml](../helm/taskflow/templates/namespace.yaml)):
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ .Values.namespace }}   # → "taskflow" from values.yaml
-```
 
 ---
 
