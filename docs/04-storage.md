@@ -98,21 +98,34 @@ spec:
   # Production (GKE, EKS): "ssd", "gp2", etc.
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/mongo-pvc.yaml](../helm/taskflow/templates/mongo-pvc.yaml)):
-```yaml
-{{- if .Values.mongo.enabled }}    # ← only create if using internal MongoDB
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: taskflow-mongo-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.mongo.storageSize }}  # ← "5Gi" from values.yaml
-{{- end }}
+### → Try It: Apply a PVC and Watch It Bind
+
+```bash
+# Apply the PVC
+kubectl apply -f k8s-scripts/09-pvc.yaml
+
+# Check its status immediately
+kubectl get pvc -n taskflow
+# STATUS: Pending   ← waiting for a Pod to mount it (Minikube behavior)
+
+# Apply the StatefulSet (this triggers the PV to be created and bound)
+kubectl apply -f k8s-scripts/03-statefulset.yaml
+
+# Check PVC status again
+kubectl get pvc -n taskflow
+# STATUS: Bound   ← a PV was automatically created and bound
+
+# See the PV that was auto-created by Minikube's StorageClass
+kubectl get pv
+# Notice: RECLAIM POLICY = Delete (Minikube default — data gone when PVC deleted)
+# Notice: STORAGECLASS = standard
+
+# Inspect what Minikube created
+kubectl describe pv <pv-name-from-above>
+# Look for: Source.HostPath — the actual directory on the Minikube VM
 ```
+
+> **What you just proved:** You created a PVC (a claim/request for storage). Kubernetes matched it with a PV (actual disk), created by Minikube's `standard` StorageClass automatically. The pod then mounted that PV as `/data/db`.
 
 ---
 
@@ -183,7 +196,7 @@ kubectl describe pvc taskflow-mongo-pvc -n taskflow
 # Look for: Status: Bound, Volume, StorageClass, Access Modes
 
 kubectl get pv
-# Notice: RECLAIM POLICY = Delete (Minikube default)
+# RECLAIM POLICY = Delete (Minikube default)
 
 # ── Part 2: Write Data to MongoDB ───────────────────────────
 

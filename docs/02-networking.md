@@ -62,7 +62,7 @@ Short form (within same namespace):
   mongo   ← resolves to the same address
 ```
 
-This is why `values.yaml` has `mongoUri: "mongodb://mongo:27017/taskflow"` — not an IP address.
+This is why `MONGO_URI` is `"mongodb://mongo:27017/taskflow"` — not an IP address. The name `mongo` resolves to the Service, and the Service routes to the pod.
 
 ### Headless Services (for StatefulSets)
 
@@ -109,17 +109,39 @@ spec:
     app: mongo
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/api-service.yaml](../helm/taskflow/templates/api-service.yaml)):
-```yaml
-metadata:
-  name: {{ include "taskflow.fullname" . }}-api
-spec:
-  type: {{ .Values.api.service.type }}
-  ports:
-    - port: {{ .Values.api.service.port }}
-  selector:
-    app: api
+### → Try It: Apply Services and Observe Routing
+
+```bash
+# Make sure the Deployment from chapter 01 is running first
+kubectl get pods -n taskflow
+
+# Apply both Services (the file contains two objects separated by ---)
+kubectl apply -f k8s-scripts/04-service-clusterip.yaml
+
+# See the Services
+kubectl get svc -n taskflow
+# api: ClusterIP with a stable 10.x.x.x IP
+# mongo: ClusterIP with None (headless)
+
+# See the Endpoints — actual pod IPs behind the Service
+kubectl get endpoints api -n taskflow
+# Lists the 3 pod IPs (these change; the Service IP doesn't)
+
+kubectl describe svc api -n taskflow
+# Look for: Selector, Endpoints, Type
+
+# Prove DNS works — exec into the API pod
+kubectl exec -it <api-pod-name> -n taskflow -- sh
+nslookup api          # → 10.96.x.x (ClusterIP)
+nslookup mongo        # → individual pod IPs (headless)
+exit
+
+# Delete one API pod — watch the Endpoints update automatically
+kubectl delete pod <api-pod-name> -n taskflow
+kubectl get endpoints api -n taskflow  # New pod IP appears as old one disappears
 ```
+
+> **What you just proved:** The Service IP stays constant (`10.96.x.x`), but the Endpoints list (actual pod IPs) updates live as pods come and go. The Service is the stable abstraction layer.
 
 ---
 
@@ -157,6 +179,25 @@ spec:
       nodePort: 30500     # Static port on every node (valid range: 30000–32767)
   selector:
     app: api
+```
+
+### → Try It: Access the API via NodePort
+
+```bash
+kubectl apply -f k8s-scripts/05-service-nodeport.yaml
+
+# Get the Minikube node IP
+minikube ip
+
+# Hit the API directly without Ingress
+curl http://$(minikube ip):30500/api/health
+# Should return: {"status":"ok","..."}
+
+kubectl get svc api-nodeport -n taskflow
+# TYPE: NodePort, PORT(S): 5000:30500/TCP
+
+# Clean up — we'll use Ingress for real traffic
+kubectl delete -f k8s-scripts/05-service-nodeport.yaml
 ```
 
 ---
@@ -218,17 +259,40 @@ spec:
                   number: 80
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/ingress.yaml](../helm/taskflow/templates/ingress.yaml)):
-```yaml
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: "{{ .Values.ingress.host }}"
-      http:
-        paths:
-          - path: /api → backend: api:5000
-          - path: /    → backend: web:80
+### → Try It: Apply Ingress and Test End-to-End Routing
+
+```bash
+# Enable the Nginx Ingress Controller addon (one-time setup)
+minikube addons enable ingress
+
+# Wait for the ingress controller pod to be ready
+kubectl get pods -n ingress-nginx -w
+# Wait until: ingress-nginx-controller-xxx  Running
+
+# Apply the Ingress rules
+kubectl apply -f k8s-scripts/06-ingress.yaml
+
+# Add the hostname to your hosts file (run as Administrator on Windows)
+# Open: C:\Windows\System32\drivers\etc\hosts
+# Add this line:
+#   192.168.49.2  taskflow.local    ← replace IP with: minikube ip
+
+# Test the routing
+curl http://taskflow.local/api/health
+# → routes to the API service
+
+curl http://taskflow.local/
+# → routes to the web service
+
+# Inspect the Ingress object
+kubectl describe ingress taskflow-ingress -n taskflow
+# Look for: Rules, Endpoints — shows which backend each path hits
+
+kubectl get ingress -n taskflow
+# Shows: ADDRESS (the Minikube IP), HOSTS, PORTS
 ```
+
+> **What you just proved:** One Ingress object controls all external HTTP routing. The Ingress Controller (Nginx) reads it and routes accordingly — without you touching any Nginx config files directly.
 
 ---
 
@@ -260,51 +324,43 @@ StatefulSet Pod: taskflow-mongo-0
 
 ## 🛠️ Hands-On Challenge
 
-**Goal:** Trace a request through the networking stack.
+**Goal:** Trace a complete request through every layer of the networking stack.
 
 ```bash
-# ── Part 1: Inspect Services ────────────────────────────────
+# ── Step 1: Apply everything in order ───────────────────────
+kubectl apply -f k8s-scripts/00-namespace.yaml
+kubectl apply -f k8s-scripts/07-configmap.yaml
+kubectl apply -f k8s-scripts/08-secret.yaml
+kubectl apply -f k8s-scripts/09-pvc.yaml
+kubectl apply -f k8s-scripts/03-statefulset.yaml
+kubectl apply -f k8s-scripts/02-deployment.yaml
+kubectl apply -f k8s-scripts/04-service-clusterip.yaml
+kubectl apply -f k8s-scripts/06-ingress.yaml
 
-kubectl get svc -n taskflow
-# You'll see: api (ClusterIP), mongo (ClusterIP), web (ClusterIP)
+# Notice: 8 separate commands just to get to a working app.
+# This is the exact problem we solve in Chapter 05 with Helm.
 
-kubectl describe svc api -n taskflow
-# Look for: Endpoints — these are the actual pod IPs being load-balanced
+# ── Step 2: Inspect the full networking stack ────────────────
+kubectl get all -n taskflow                   # Everything in one view
+kubectl get endpoints -n taskflow             # Actual pod IPs behind each Service
 
-kubectl get endpoints api -n taskflow
-# Lists the 3 pod IPs currently behind the Service
-
-# ── Part 2: Test Internal DNS ────────────────────────────────
-
+# ── Step 3: Test internal DNS from inside the cluster ────────
 kubectl exec -it <api-pod-name> -n taskflow -- sh
-
-# Inside the pod — test DNS resolution
 nslookup mongo                              # → mongo.taskflow.svc.cluster.local
 nslookup api                               # → resolves to the Service ClusterIP
-nslookup monitoring-grafana.monitoring     # → even cross-namespace!
+nslookup monitoring-grafana.monitoring     # → cross-namespace DNS works too!
 exit
 
-# ── Part 3: Test the Ingress ─────────────────────────────────
-
-# Make sure hosts file has: 192.168.49.2 taskflow.local
-curl http://taskflow.local/api/health
-curl http://taskflow.local/api/workspaces
-
-kubectl describe ingress -n taskflow
-# Look for: Rules, Backend, Endpoints
-
-# ── Part 4: Watch Load Balancing ─────────────────────────────
-
-# Watch logs across all API pods simultaneously
+# ── Step 4: Watch load balancing in action ───────────────────
 kubectl logs -l app=api -n taskflow -f --max-log-requests=10
-# Make several requests and notice different pods handling them
+# Make several requests — notice different pods handle them
 ```
 
 **What to notice:**
-- Services have an `Endpoints` object listing the actual pod IPs
+- Services have `Endpoints` that update as pods start/stop
 - DNS works across namespaces: `<service>.<namespace>`
-- The Ingress routes `/api/*` to the API, everything else to the frontend
-- Load is distributed across all 3 API replicas
+- You needed 8 `kubectl apply` commands for a basic working stack
+- Ingress routes `/api/*` to the API, everything else to the frontend
 
 ---
 

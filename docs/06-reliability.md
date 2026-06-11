@@ -131,20 +131,42 @@ spec:
           averageUtilization: 80
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/api-hpa.yaml](../helm/taskflow/templates/api-hpa.yaml)):
-```yaml
-{{- if .Values.api.autoscaling.enabled }}
-spec:
-  minReplicas: {{ .Values.api.autoscaling.minReplicas }}    # 3
-  maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}    # 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          averageUtilization: {{ .Values.api.autoscaling.targetCPUUtilizationPercentage }}
-{{- end }}
+### → Try It: Apply HPA and Watch It Scale
+
+```bash
+# Enable metrics-server (required for HPA to work)
+minikube addons enable metrics-server
+
+# Wait for metrics-server to be ready
+kubectl get pods -n kube-system | grep metrics-server
+
+# Apply the HPA
+kubectl apply -f k8s-scripts/10-hpa.yaml
+
+# Check HPA status
+kubectl get hpa -n taskflow
+# TARGETS: <unknown>/60%   ← wait ~30 seconds for first metrics scrape
+# After a minute: 5%/60%  ← low traffic, 3 replicas
+
+# Terminal 1: Watch HPA continuously
+kubectl get hpa -n taskflow -w
+
+# Terminal 2: Generate load
+kubectl run load-test \
+  --image=busybox \
+  --restart=Never \
+  -n taskflow \
+  --command -- sh -c "while true; do wget -q -O- http://api:5000/api/health; done"
+
+# Back in Terminal 1 — watch TARGETS tick up and REPLICAS increase
+# When CPU > 60%, HPA scales up. Stop the load:
+kubectl delete pod load-test -n taskflow
+
+# Watch scale-down — takes ~5 minutes (conservative to prevent flapping)
+kubectl get hpa -n taskflow -w
 ```
+
+> **What you just proved:** HPA automatically maintains your target CPU utilisation. Scale-up is fast (seconds); scale-down is deliberately slow (minutes) to prevent thrashing.
 
 ---
 
@@ -197,16 +219,31 @@ spec:
       app: api
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/api-pdb.yaml](../helm/taskflow/templates/api-pdb.yaml)):
-```yaml
-{{- if .Values.api.pdb.enabled }}
-spec:
-  maxUnavailable: {{ .Values.api.pdb.maxUnavailable }}  # 1
-  selector:
-    matchLabels:
-      app: api
-{{- end }}
+### → Try It: Apply PDB and Simulate a Drain
+
+```bash
+# Apply the PDB
+kubectl apply -f k8s-scripts/11-pdb.yaml
+
+# Inspect it
+kubectl get pdb -n taskflow
+# Shows: MIN AVAILABLE, MAX UNAVAILABLE, ALLOWED DISRUPTIONS
+
+kubectl describe pdb taskflow-api-pdb -n taskflow
+# Look for: Disruptions Allowed (should be 1 with 3 replicas)
+
+# Simulate a node drain (Minikube has 1 node, so this is educational)
+kubectl cordon minikube                 # Mark node as unschedulable
+kubectl drain minikube \
+  --ignore-daemonsets \
+  --delete-emptydir-data \
+  --force
+# Watch: pods evicted one at a time because of PDB
+
+kubectl uncordon minikube              # Restore scheduling
 ```
+
+> **What you just proved:** PDB enforces eviction ordering. Without it, all pods on a node could be evicted simultaneously during maintenance, causing downtime.
 
 ---
 
@@ -225,7 +262,6 @@ Rolling update begins:
 
   [api-1] [api-2] [api-3] [api-NEW]   4 pods briefly
   [api-2] [api-3] [api-NEW]           3 pods (api-1 deleted)
-  [api-2] [api-3] [api-NEW] [api-NEW2] 4 pods briefly
   ...
   [api-NEW] [api-NEW2] [api-NEW3]      3 pods ✅ Done
 ```
@@ -239,47 +275,42 @@ At no point were 0 pods serving. Gradual cutover from old to new version.
 **Goal:** Watch HPA scale up, observe PDB protection, and inspect resource limits.
 
 ```bash
-# ── Part 1: Watch HPA Scale Up ──────────────────────────────
-
-# Terminal 1: Watch HPA continuously
-kubectl get hpa -n taskflow -w
-
-# Terminal 2: Create load (busybox loop)
-kubectl run load-test \
-  --image=busybox \
-  --restart=Never \
-  -n taskflow \
-  --command -- sh -c "while true; do wget -q -O- http://api:5000/api/health; done"
-
-# Watch in Terminal 1:
-# TARGETS will show current/target CPU%
-# REPLICAS will tick upward as CPU exceeds 60%
-
-# Kill the load test when done
-kubectl delete pod load-test -n taskflow
-
-# Watch scale-down (takes ~5 minutes by default)
-kubectl get hpa -n taskflow -w
-
-# ── Part 2: Observe PDB Protection ──────────────────────────
-
-kubectl get pdb -n taskflow
-kubectl describe pdb taskflow-api -n taskflow
-# Look for: Disruptions Allowed
-
-# Simulate a drain (without actually draining the node)
-kubectl cordon minikube                 # Mark node as unschedulable
-kubectl drain minikube --ignore-daemonsets --delete-emptydir-data
-# Watch: pods evicted one at a time, not all at once
-
-kubectl uncordon minikube              # Restore node scheduling
-
-# ── Part 3: Resource Inspection ─────────────────────────────
+# ── Part 1: Resource Inspection ─────────────────────────────
 
 kubectl top pods -n taskflow
 kubectl top nodes
 
 kubectl describe pod <api-pod-name> -n taskflow | grep -A 10 "Limits\|Requests"
+# See the actual CPU/memory ceiling for each container
+
+# ── Part 2: Full Stack Applied with Raw YAML ──────────────────
+
+# At this point you've applied:
+# kubectl apply -f k8s-scripts/00-namespace.yaml
+# kubectl apply -f k8s-scripts/07-configmap.yaml
+# kubectl apply -f k8s-scripts/08-secret.yaml
+# kubectl apply -f k8s-scripts/09-pvc.yaml
+# kubectl apply -f k8s-scripts/02-deployment.yaml
+# kubectl apply -f k8s-scripts/03-statefulset.yaml
+# kubectl apply -f k8s-scripts/04-service-clusterip.yaml
+# kubectl apply -f k8s-scripts/06-ingress.yaml
+# kubectl apply -f k8s-scripts/10-hpa.yaml
+# kubectl apply -f k8s-scripts/11-pdb.yaml
+# That's 10 separate files, applied in a specific dependency order.
+# What if you forget one? What if order changes? What about staging?
+# Chapter 05 — Helm — solved all of this.
+
+# ── Part 3: Full HPA Scale Test ──────────────────────────────
+
+kubectl get hpa -n taskflow -w &   # background watch
+
+kubectl run load-test \
+  --image=busybox --restart=Never -n taskflow \
+  --command -- sh -c "while true; do wget -q -O- http://api:5000/api/health; done"
+
+# Watch replicas increase as CPU climbs above 60%
+# Kill load and watch slow scale-down
+kubectl delete pod load-test -n taskflow
 ```
 
 **What to notice:**

@@ -29,14 +29,14 @@ This diagram shows every resource used in this project and how they connect:
 - **Top-left legend:** A reference card for every K8s object type. Use it as a cheat sheet — each shape/colour maps to a specific resource kind.
 - **User → Internet → Ingress:** All external traffic enters through the Nginx Ingress Controller, which routes to the correct Service based on path or host.
 - **Inside the Namespace (`my-app`):** This is where your application lives. Notice it's sandboxed — resources in other namespaces can't conflict with these names.
-- **Service → Deployment → Pods:** The API (stateless) side. The Service has a stable ClusterIP (`my-app-svc`, `10.96.12.34`). The Deployment manages 3 identical, interchangeable Pods.
-- **Service → StatefulSet → Pods:** The Database (stateful) side. Each pod (`mydb-0`, `mydb-1`, `mydb-2`) has its own identity and its own PVC → PV chain. Note how each pod gets *its own separate* PersistentVolumeClaim — not shared.
-- **Config & Secrets (top-right):** ConfigMap and Secret objects live outside pods but are injected into them as environment variables. They are referenced by the Deployment and StatefulSet.
-- **HPA (right side):** Watches the Deployment. When CPU/memory crosses the target threshold, it patches `replicas`. Min: 2, Max: 10 in this example.
-- **PDB (right side):** Guards the Deployment. During node drains or upgrades, ensures at least N pods remain available at all times.
-- **Namespace (bottom-left):** A visual reminder that the Namespace object is what creates the boundary — it is itself a K8s resource you must create first.
+- **Service → Deployment → Pods:** The API (stateless) side. The Service has a stable ClusterIP. The Deployment manages 3 identical, interchangeable Pods.
+- **Service → StatefulSet → Pods:** The Database (stateful) side. Each pod (`mydb-0`, `mydb-1`, `mydb-2`) has its own identity and its own PVC → PV chain.
+- **Config & Secrets (top-right):** ConfigMap and Secret objects injected into pods as environment variables.
+- **HPA (right side):** Watches the Deployment. Scales replicas based on CPU/memory.
+- **PDB (right side):** Guards the Deployment during node drains.
+- **Namespace (bottom-left):** A visual reminder that the Namespace itself is a K8s resource you must create first.
 
-> **The key pattern:** Every connection in this diagram is managed by a Kubernetes **controller** watching for state changes. Nothing is wired up manually — labels + selectors do the binding.
+> **The key pattern:** Every connection is managed by a Kubernetes **controller** watching for state changes. Labels + selectors do the binding — nothing is wired up manually.
 
 ---
 
@@ -50,7 +50,7 @@ A Pod is the smallest deployable unit. It wraps **one or more containers** that:
 ### Why Not Just Use Pods Directly?
 
 ```
-You create a naked Pod: kubectl apply -f pod.yaml
+You create a naked Pod: kubectl apply -f 01-pod.yaml
 Pod crashes.
 Kubernetes does NOT recreate it.
 Your app is down.
@@ -121,6 +121,40 @@ spec:
         periodSeconds: 15
         failureThreshold: 5     # Container is restarted after 5 consecutive failures
 ```
+
+### → Try It: Apply and Observe a Pod
+
+```bash
+# Make sure the taskflow namespace exists first
+kubectl apply -f k8s-scripts/00-namespace.yaml
+
+# Create the pod
+kubectl apply -f k8s-scripts/01-pod.yaml
+
+# Watch it start up
+kubectl get pod taskflow-api-pod -n taskflow -w
+# Should go: Pending → Running
+
+# Inspect it
+kubectl describe pod taskflow-api-pod -n taskflow
+# Read the Events section at the bottom — shows every step K8s took
+
+# Check the probe results
+kubectl describe pod taskflow-api-pod -n taskflow | grep -A 5 "Readiness\|Liveness"
+
+# See the logs
+kubectl logs taskflow-api-pod -n taskflow
+
+# Now simulate a crash — delete the pod
+kubectl delete pod taskflow-api-pod -n taskflow
+
+# Try to get it again
+kubectl get pod taskflow-api-pod -n taskflow
+# Error: pod "taskflow-api-pod" not found
+# ↑ This is the problem. No one recreated it. Use a Deployment instead.
+```
+
+> **What you just proved:** A naked Pod is NOT self-healing. When it's deleted — by you, a crash, or a node failure — it stays dead. This is exactly why Deployments exist.
 
 ---
 
@@ -228,21 +262,48 @@ spec:
             failureThreshold: 5
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/api-deployment.yaml](../helm/taskflow/templates/api-deployment.yaml)):
-```yaml
-spec:
-  replicas: {{ .Values.api.replicaCount }}           # → 3
-  strategy:
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  template:
-    spec:
-      containers:
-        - image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+### → Try It: Apply and Observe a Deployment
+
+```bash
+# Apply the ConfigMap and Secret first (Deployment needs them to start)
+kubectl apply -f k8s-scripts/07-configmap.yaml
+kubectl apply -f k8s-scripts/08-secret.yaml
+
+# Create the Deployment
+kubectl apply -f k8s-scripts/02-deployment.yaml
+
+# Watch pods come up — notice random hash names (not taskflow-api-0, 1, 2)
+kubectl get pods -n taskflow -w
+
+# See the ReplicaSet that Deployment created automatically
+kubectl get replicaset -n taskflow
+
+# Prove self-healing: delete one pod
+kubectl delete pod <paste-one-pod-name-here> -n taskflow
+kubectl get pods -n taskflow
+# A new pod is created immediately to replace it. Deployment maintains 3 replicas.
+
+# Scale up manually
+kubectl scale deployment taskflow-api -n taskflow --replicas=5
+kubectl get pods -n taskflow  # Should now show 5 pods
+
+# Scale back down
+kubectl scale deployment taskflow-api -n taskflow --replicas=3
+
+# Trigger a rolling update (simulates deploying a new image)
+kubectl rollout restart deployment/taskflow-api -n taskflow
+kubectl rollout status deployment/taskflow-api -n taskflow
+
+# View rollout history
+kubectl rollout history deployment/taskflow-api -n taskflow
+
+# Roll back if needed
+kubectl rollout undo deployment/taskflow-api -n taskflow
 ```
 
-### Rollback
+> **What you just proved:** Deployments self-heal, scale, and roll out — all without downtime. But notice the problem: all config is hardcoded in the YAML. To run this in staging with 1 replica, you'd need a second copy of the file. We'll solve this in [Chapter 05 — Helm](./05-helm.md).
+
+### Rollback Commands
 
 ```bash
 kubectl rollout history deployment/taskflow-api -n taskflow
@@ -326,21 +387,37 @@ spec:
             claimName: taskflow-mongo-pvc
 ```
 
-**Helm equivalent** ([helm/taskflow/templates/mongo-statefulset.yaml](../helm/taskflow/templates/mongo-statefulset.yaml)):
-```yaml
-spec:
-  serviceName: {{ include "taskflow.fullname" . }}-mongo
-  replicas: 1
-  template:
-    spec:
-      containers:
-        - volumeMounts:
-            - name: mongo-storage
-              mountPath: /data/db
-      volumes:
-        - persistentVolumeClaim:
-            claimName: {{ include "taskflow.fullname" . }}-mongo-pvc
+### → Try It: Apply and Observe a StatefulSet
+
+```bash
+# Apply the PVC first (StatefulSet needs storage)
+kubectl apply -f k8s-scripts/09-pvc.yaml
+
+# Create the StatefulSet
+kubectl apply -f k8s-scripts/03-statefulset.yaml
+
+# Notice: pods have ORDINAL names, not random hashes
+kubectl get pods -n taskflow | grep mongo
+# Output: taskflow-mongo-0   ← always this exact name
+
+# See the StatefulSet status
+kubectl get statefulset -n taskflow
+
+# Delete the pod — watch it restart with the SAME name
+kubectl delete pod taskflow-mongo-0 -n taskflow
+kubectl get pods -n taskflow -w
+# mongo-0 reappears with the same name, same PVC, same data
+
+# Try to scale (creates mongo-0, mongo-1 in order)
+kubectl scale statefulset taskflow-mongo -n taskflow --replicas=2
+kubectl get pods -n taskflow -w
+# mongo-1 starts ONLY after mongo-0 is Running and Ready
+
+# Scale back down (deletes mongo-1 first, in reverse order)
+kubectl scale statefulset taskflow-mongo -n taskflow --replicas=1
 ```
+
+> **What you just proved:** StatefulSets give each pod a stable name and dedicated storage. The ordered, predictable naming is what makes databases like MongoDB work reliably in Kubernetes.
 
 ---
 
@@ -360,25 +437,26 @@ kubectl rollout restart deployment/taskflow-api -n taskflow
 # In Terminal 1 you should see:
 # - New pods created (Pending → Running)
 # - Old pods terminated one by one
-# - Never more than 1 extra pod at a time
+# - Never more than 1 extra pod at a time (maxSurge: 1)
+# - Never 0 available pods (maxUnavailable: 0)
 
-# ── Part 2: Understand the StatefulSet ──────────────────────
-
-# See the stable pod name
-kubectl get pods -n taskflow | grep mongo
-# Should always be: taskflow-mongo-0  (not a random hash)
-
-# Delete the MongoDB pod (simulate a crash)
-kubectl delete pod taskflow-mongo-0 -n taskflow
-
-# Watch it restart — same name, same PVC, same data
-kubectl get pods -n taskflow -w
-
-# ── Part 3: Explore Probe Behaviour ─────────────────────────
+# ── Part 2: Explore Probe Behaviour ─────────────────────────
 
 # See probe configuration for the API
 kubectl describe pod <api-pod-name> -n taskflow
-# Look for: Liveness, Readiness sections
+# Look for: Liveness, Readiness sections — note delays and thresholds
+
+# ── Part 3: Reflect on the Hardcoded Problem ─────────────────
+
+# How many YAML files did you just need to apply manually?
+# 00-namespace.yaml
+# 07-configmap.yaml
+# 08-secret.yaml
+# 09-pvc.yaml
+# 02-deployment.yaml
+# 03-statefulset.yaml
+# ...and we haven't done services or ingress yet.
+# This is the problem Helm solves. We'll get there in Chapter 05.
 ```
 
 **What to notice:**
