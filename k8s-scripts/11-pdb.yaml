@@ -1,7 +1,6 @@
-# 11-pdb.yaml — Raw Kubernetes YAML
-# See README.md in this folder for full explanation.
-
-
+# 11-pdb.yaml
+# Applies during voluntary disruptions only (node drain, upgrades).
+# Does NOT protect against hardware failures or OOMKilled crashes.
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -10,11 +9,9 @@ metadata:
   labels:
     app: api
 spec:
-  # During any voluntary disruption, at most 1 pod may be unavailable.
-  # Equivalent to: always maintain minAvailable = (replicas - 1) = 2
+  # With 3 replicas: at most 1 pod can be taken down at a time during maintenance
   maxUnavailable: 1
 
-  # The PDB applies to all pods matching this selector
   selector:
     matchLabels:
       app.kubernetes.io/name: taskflow

@@ -35,6 +35,8 @@ The documentation has been structured into a 13-part curriculum. Each chapter co
 
 This project runs the TaskFlow API (Node.js/Express) and Web UI (React) backed by MongoDB. The entire stack is instrumented for metrics, logs, and traces.
 
+![Kubernetes Architecture](./assets/kubernetes-architecture.jpg)
+
 ![Observability Architecture](./assets/observability-architecture.png)
 
 *For a deep dive into how every component above communicates, see [07 — Observability Architecture](./docs/07-observability-arch.md).*

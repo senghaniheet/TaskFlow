@@ -28,7 +28,7 @@ A PV is a **cluster-level** storage resource. It represents actual storage: a di
 PVs have a lifecycle **independent of any Pod**. Even if the pod is deleted, the PV (and its data) remains.
 
 ```yaml
-# A PV is usually created by the cluster admin or automatically by a StorageClass
+# A PV is usually created automatically by a StorageClass
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -48,19 +48,6 @@ A PVC is a pod's **request** for storage. Like renting an apartment:
 - You specify how big (5Gi)
 - You specify the access mode (ReadWriteOnce)
 - Kubernetes finds a matching PV and "binds" it exclusively to your PVC
-
-```yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: taskflow-mongo-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-```
 
 ### 3. StorageClass — Dynamic Provisioning
 
@@ -88,8 +75,44 @@ Minikube provides a default StorageClass called `standard` that creates `hostPat
 | `ReadWriteMany` | RWX | Multiple nodes can mount simultaneously |
 | `ReadOnlyMany` | ROX | Multiple nodes, read-only |
 
-**Why MongoDB uses RWO:**
-MongoDB's WiredTiger storage engine uses file-level locking. Two MongoDB processes writing to the same `/data/db` directory simultaneously would corrupt the data. RWO ensures only one node can write at a time.
+**Why MongoDB uses RWO:** MongoDB's WiredTiger storage engine uses file-level locking. Two MongoDB processes writing to the same `/data/db` directory simultaneously would corrupt the data. RWO ensures only one node writes at a time.
+
+### Raw YAML ([k8s-scripts/09-pvc.yaml](../k8s-scripts/09-pvc.yaml))
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: taskflow-mongo-pvc    # Referenced by the StatefulSet's volumes section
+  namespace: taskflow
+spec:
+  accessModes:
+    - ReadWriteOnce           # One node can mount for read/write at a time (correct for MongoDB)
+
+  resources:
+    requests:
+      storage: 5Gi
+
+  # storageClassName omitted → uses cluster default
+  # Minikube default: "standard" (hostPath on local disk)
+  # Production (GKE, EKS): "ssd", "gp2", etc.
+```
+
+**Helm equivalent** ([helm/taskflow/templates/mongo-pvc.yaml](../helm/taskflow/templates/mongo-pvc.yaml)):
+```yaml
+{{- if .Values.mongo.enabled }}    # ← only create if using internal MongoDB
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: taskflow-mongo-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mongo.storageSize }}  # ← "5Gi" from values.yaml
+{{- end }}
+```
 
 ---
 
@@ -100,14 +123,11 @@ When a PVC is created, K8s searches for a PV that satisfies:
 2. **Access mode:** PV supports the requested access mode
 3. **StorageClass:** Same class (or default if not specified)
 
-If a matching PV exists: it's **bound** to the PVC immediately.
-If no matching PV exists: K8s checks if the StorageClass can **dynamically provision** one.
-
 ```
 kubectl get pvc -n taskflow
 
-NAME                      STATUS   VOLUME                CAPACITY   ACCESS MODES
-taskflow-mongo-pvc        Bound    pvc-a1b2c3...         5Gi        RWO
+NAME                      STATUS   VOLUME        CAPACITY   ACCESS MODES
+taskflow-mongo-pvc        Bound    pvc-a1b2c3    5Gi        RWO
 ```
 
 **Bound** = the PVC found a PV and data can be written. Any other status means the pod can't start.
@@ -121,13 +141,11 @@ Normal operation:
   mongo-0 pod → mounts PVC → writes to /data/db → PV on node disk
 
 Pod is deleted (crash, rolling update, etc.):
-  mongo-0 deleted → PVC remains (not deleted) → PV remains (not deleted)
+  mongo-0 deleted → PVC remains → PV remains (data intact)
 
 K8s recreates the pod:
-  mongo-0 recreated → claims same PVC (same name, stable StatefulSet identity)
+  mongo-0 recreated → claims same PVC (stable StatefulSet identity)
   → mounts same PV → /data/db has all previous data ✅
-
-Data survives! ✅
 ```
 
 **What would destroy data:**
@@ -151,47 +169,6 @@ For a database, use `Retain` in production. Minikube's default is `Delete`.
 
 ---
 
-## 🔍 In This Project
-
-### PVC
-**File:** [`helm/taskflow/templates/mongo-pvc.yaml`](../helm/taskflow/templates/mongo-pvc.yaml)
-
-```yaml
-{{- if .Values.mongo.enabled }}    # ← only create if using internal MongoDB
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: taskflow-mongo-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: {{ .Values.mongo.storageSize }}  # ← "5Gi" from values.yaml
-{{- end }}
-```
-
-**Raw YAML version:** [`k8s-scripts/09-pvc.yaml`](../k8s-scripts/09-pvc.yaml)
-
-### StatefulSet Volume Mount
-**File:** [`helm/taskflow/templates/mongo-statefulset.yaml`](../helm/taskflow/templates/mongo-statefulset.yaml)
-
-```yaml
-containers:
-  - name: mongo
-    volumeMounts:
-      - name: mongo-storage
-        mountPath: /data/db      # ← MongoDB writes ALL data here
-volumes:
-  - name: mongo-storage
-    persistentVolumeClaim:
-      claimName: taskflow-mongo-pvc  # ← references the PVC
-```
-
-The chain: **StatefulSet Pod → PVC → PV → Actual disk** — MongoDB only knows about `/data/db`.
-
----
-
 ## 🛠️ Hands-On Challenge
 
 **Goal:** Prove that MongoDB data survives pod restarts.
@@ -201,25 +178,21 @@ The chain: **StatefulSet Pod → PVC → PV → Actual disk** — MongoDB only k
 
 kubectl get pvc -n taskflow
 # STATUS should be: Bound
-# VOLUME will be something like: pvc-abc123...
 
 kubectl describe pvc taskflow-mongo-pvc -n taskflow
 # Look for: Status: Bound, Volume, StorageClass, Access Modes
 
-# Also see the automatically created PV
 kubectl get pv
 # Notice: RECLAIM POLICY = Delete (Minikube default)
 
 # ── Part 2: Write Data to MongoDB ───────────────────────────
 
-# Connect to the MongoDB pod
 kubectl exec -it taskflow-mongo-0 -n taskflow -- mongosh
 
 # Inside mongosh — create some test data
 use testdb
 db.test.insertOne({ message: "This data should survive a pod restart", timestamp: new Date() })
 db.test.find()
-# Note: you should see your document
 exit
 
 # ── Part 3: Delete the Pod and Watch It Restart ──────────────
@@ -253,16 +226,3 @@ ls /tmp/hostpath-provisioner/  # ← Minikube stores PV data here
 ---
 
 **Next:** [05 — Helm: The Package Manager for Kubernetes →](./05-helm.md)
-
-
-## Raw YAML Reference
-
-### [09-pvc.yaml](../k8s-scripts/09-pvc.yaml) — Durable Storage
-**THE STORAGE TRILOGY:**
-  - **PersistentVolume (PV):** A cluster-level storage resource (like a physical hard disk).
-  - **PersistentVolumeClaim (PVC):** A pod's request for storage. Like renting an apartment (you specify size and access mode).
-  - **StorageClass:** A template for dynamically creating PVs on demand.
-
-**ACCESS MODES:**
-  - `ReadWriteOnce (RWO)`: mounted by ONE node at a time (MongoDB's mode)
-  - `ReadWriteMany (RWX)`: mounted by MANY nodes simultaneously

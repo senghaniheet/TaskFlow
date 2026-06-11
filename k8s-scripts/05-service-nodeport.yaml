@@ -1,21 +1,17 @@
-# 05-service-nodeport.yaml — Raw Kubernetes YAML
-# See README.md in this folder for full explanation.
-
-
+# 05-service-nodeport.yaml — for development/testing only; use Ingress in production
 apiVersion: v1
 kind: Service
 metadata:
-  name: api-nodeport          # Separate name to not conflict with ClusterIP service
+  name: api-nodeport
   namespace: taskflow
   labels:
     app: api
 spec:
   type: NodePort
   ports:
-    - port: 5000              # Internal cluster port
-      targetPort: 5000        # Pod port
-      nodePort: 30500         # External port on the node (30000-32767 range)
-                              # If omitted, K8s assigns a random port in this range
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30500         # Static port on every node (valid range: 30000–32767)
   selector:
     app.kubernetes.io/name: taskflow
-    app: api                  # Same selector — routes to the same API pods
+    app: api

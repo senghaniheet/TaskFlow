@@ -1,22 +1,17 @@
-# 09-pvc.yaml — Raw Kubernetes YAML
-# See README.md in this folder for full explanation.
-
-
+# 09-pvc.yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: taskflow-mongo-pvc    # StatefulSet references this by name
+  name: taskflow-mongo-pvc    # Referenced by the StatefulSet's volumes section
   namespace: taskflow
 spec:
   accessModes:
-    - ReadWriteOnce            # Only one node can mount for read/write at a time
+    - ReadWriteOnce           # One node can mount for read/write at a time (correct for MongoDB)
 
   resources:
     requests:
-      storage: 5Gi             # Request 5 gigabytes of storage
+      storage: 5Gi
 
-  # storageClassName omitted → uses the cluster's default StorageClass
-  # In Minikube, this is "standard" which creates a hostPath volume.
-  # In production (GKE, EKS), this would be "ssd", "gp2", etc.
-  # Explicitly set it with:
-  # storageClassName: standard
+  # storageClassName omitted → uses cluster default
+  # Minikube default: "standard" (hostPath on local disk)
+  # Production (GKE, EKS): "ssd", "gp2", etc.

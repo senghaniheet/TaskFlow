@@ -12,8 +12,6 @@ A production service must survive:
 - **Memory leaks** — kill and restart leaky containers before they crash the node
 - **Slow starts** — don't route traffic to a container still warming up
 
-Kubernetes provides four mechanisms for this:
-
 | Problem | Solution |
 |---------|---------|
 | Traffic spikes | Horizontal Pod Autoscaler (HPA) |
@@ -27,17 +25,7 @@ Kubernetes provides four mechanisms for this:
 
 Every container should declare its resource needs.
 
-```yaml
-resources:
-  requests:             # Minimum guaranteed allocation
-    cpu: 200m           # 200 millicores = 0.2 CPU cores
-    memory: 128Mi
-  limits:               # Hard ceiling — container is killed if exceeded
-    cpu: 1000m          # 1 full core max
-    memory: 512Mi
-```
-
-### Requests: For the Scheduler
+### Requests — For the Scheduler
 
 The **Scheduler** uses `requests` to decide which node can fit the pod:
 
@@ -50,14 +38,12 @@ New pod requests: 200m CPU, 128Mi memory
 → Scheduler places pod on this node ✅
 ```
 
-### Limits: For the Kernel
+### Limits — For the Kernel
 
 `limits` are enforced by the Linux kernel's cgroups:
 
-- **CPU limit:** Container gets throttled (slowed down), NOT killed. It can't burst above its limit.
+- **CPU limit:** Container gets throttled (slowed down), NOT killed.
 - **Memory limit:** If the container tries to allocate more than its limit, the kernel kills it: **OOMKilled**.
-
-### OOMKilled: The Memory Limit Lesson
 
 ```
 Memory limit: 512Mi
@@ -67,22 +53,13 @@ Container allocates 513Mi
 → kubectl describe pod shows: OOMKilled (exit code 137)
 ```
 
-When we ran the memory leak test:
-```
-Prometheus alert: PodHighMemory (for: 1m)  ← alert wants 1 minute of high memory
-K8s memory limit: 512Mi                   ← K8s kills the pod in seconds
-
-Result: Pod was killed before the 1-minute alert window expired!
-Lesson: Balance your K8s limits with your alert thresholds.
-```
-
-### CPU Units
+### CPU Units Reference
 
 | Value | Meaning |
 |-------|---------|
 | `1000m` | 1 CPU core |
 | `500m` | 0.5 CPU cores |
-| `100m` | 0.1 CPU cores (100 millicores) |
+| `200m` | 0.2 CPU cores |
 | `1` | 1 CPU core (same as 1000m) |
 
 ---
@@ -112,15 +89,62 @@ Every 15 seconds:
 | After scale-up | 3 minutes before another scale-up |
 | After scale-down | 5 minutes before scale-down |
 
-This prevents oscillation: don't scale down the moment CPU drops briefly.
-
 ### Why minReplicas: 3?
 
-Even at zero traffic, this project runs 3 API replicas. Why?
+Even at zero traffic, this project runs 3 API replicas because:
+1. **High availability:** If one pod dies, 2 are still serving
+2. **PDB compatibility:** PDB allows `maxUnavailable: 1`, so 3 gives a safe floor
+3. **Cold start avoidance:** Requests don't wait for pods to warm up when traffic resumes
 
-1. **High availability:** If one pod dies, 2 are still serving (zero downtime)
-2. **PDB compatibility:** PDB allows `maxUnavailable: 1`, so you need at least 2 always running — 3 gives the comfortable floor
-3. **Cold start avoidance:** New requests don't wait for pods to start when traffic resumes
+### Raw YAML ([k8s-scripts/10-hpa.yaml](../k8s-scripts/10-hpa.yaml))
+
+```yaml
+# Requires metrics-server addon: minikube addons enable metrics-server
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: taskflow-api-hpa
+  namespace: taskflow
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: taskflow-api          # Must match the Deployment name exactly
+
+  minReplicas: 3               # Floor — never scale below this
+  maxReplicas: 10              # Ceiling — never scale above this
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Formula: desiredReplicas = ceil(currentReplicas × (currentCPU% / 60))
+          averageUtilization: 60
+
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+```
+
+**Helm equivalent** ([helm/taskflow/templates/api-hpa.yaml](../helm/taskflow/templates/api-hpa.yaml)):
+```yaml
+{{- if .Values.api.autoscaling.enabled }}
+spec:
+  minReplicas: {{ .Values.api.autoscaling.minReplicas }}    # 3
+  maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}    # 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          averageUtilization: {{ .Values.api.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+```
 
 ---
 
@@ -149,11 +173,39 @@ Step 1: K8s checks PDB → can only evict 1 pod
 Step 2: Evicts api-pod-1 → 2 remaining pods, workload continues
 Step 3: New pod scheduled on another node → 3 pods again
 Step 4: PDB allows evicting api-pod-2 (the second pod on node-1)
-Step 5: Process repeats until node-1 is drained
 
-Without PDB: Both api-pod-1 and api-pod-2 would be evicted simultaneously
-             → Only 1 pod serving traffic during the drain
-             → Potential downtime if that pod also fails
+Without PDB: Both pods evicted simultaneously → potential downtime
+With PDB:    One at a time → always at least 2 pods serving
+```
+
+### Raw YAML ([k8s-scripts/11-pdb.yaml](../k8s-scripts/11-pdb.yaml))
+
+```yaml
+# Applies during voluntary disruptions only (node drain, upgrades).
+# Does NOT protect against hardware failures or OOMKilled crashes.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: taskflow-api-pdb
+  namespace: taskflow
+spec:
+  # With 3 replicas: at most 1 pod can be taken down at a time during maintenance
+  maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app: api
+```
+
+**Helm equivalent** ([helm/taskflow/templates/api-pdb.yaml](../helm/taskflow/templates/api-pdb.yaml)):
+```yaml
+{{- if .Values.api.pdb.enabled }}
+spec:
+  maxUnavailable: {{ .Values.api.pdb.maxUnavailable }}  # 1
+  selector:
+    matchLabels:
+      app: api
+{{- end }}
 ```
 
 ---
@@ -170,77 +222,21 @@ Rolling update begins:
   HPA: 3 desired (no load)
   PDB: maxUnavailable=1 → can only kill 1 pod at a time
   Strategy: maxSurge=1 → can create 1 extra pod
-  
+
   [api-1] [api-2] [api-3] [api-NEW]   4 pods briefly
   [api-2] [api-3] [api-NEW]           3 pods (api-1 deleted)
   [api-2] [api-3] [api-NEW] [api-NEW2] 4 pods briefly
-  [api-3] [api-NEW] [api-NEW2]         3 pods
-  [api-3] [api-NEW] [api-NEW2] [api-NEW3] 4 pods
+  ...
   [api-NEW] [api-NEW2] [api-NEW3]      3 pods ✅ Done
 ```
 
-At no point were 0 pods serving. At no point was the old version and new version both fully running together (gradual cutover).
-
----
-
-## 🔍 In This Project
-
-### HPA (API)
-**File:** [`helm/taskflow/templates/api-hpa.yaml`](../helm/taskflow/templates/api-hpa.yaml)
-
-```yaml
-spec:
-  minReplicas: {{ .Values.api.autoscaling.minReplicas }}    # 3
-  maxReplicas: {{ .Values.api.autoscaling.maxReplicas }}    # 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: {{ .Values.api.autoscaling.targetCPUUtilizationPercentage }}  # 60
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: {{ .Values.api.autoscaling.targetMemoryUtilizationPercentage }} # 80
-```
-
-**Raw YAML version:** [`k8s-scripts/10-hpa.yaml`](../k8s-scripts/10-hpa.yaml)
-
-### PDB (API)
-**File:** [`helm/taskflow/templates/api-pdb.yaml`](../helm/taskflow/templates/api-pdb.yaml)
-
-```yaml
-spec:
-  maxUnavailable: {{ .Values.api.pdb.maxUnavailable }}  # 1
-  selector:
-    matchLabels:
-      app: api
-```
-
-**Raw YAML version:** [`k8s-scripts/11-pdb.yaml`](../k8s-scripts/11-pdb.yaml)
-
-### Resource Limits
-**File:** [`helm/taskflow/values.yaml`](../helm/taskflow/values.yaml)
-
-```yaml
-api:
-  resources:
-    requests:
-      cpu: 200m        # Scheduler uses this for placement
-      memory: 128Mi
-    limits:
-      cpu: 1000m       # Throttled if exceeded
-      memory: 512Mi    # OOMKilled if exceeded
-```
+At no point were 0 pods serving. Gradual cutover from old to new version.
 
 ---
 
 ## 🛠️ Hands-On Challenge
 
-**Goal:** Watch HPA scale up, observe PDB protection, and trigger an OOMKill.
+**Goal:** Watch HPA scale up, observe PDB protection, and inspect resource limits.
 
 ```bash
 # ── Part 1: Watch HPA Scale Up ──────────────────────────────
@@ -267,13 +263,11 @@ kubectl get hpa -n taskflow -w
 
 # ── Part 2: Observe PDB Protection ──────────────────────────
 
-# See the PDB
 kubectl get pdb -n taskflow
 kubectl describe pdb taskflow-api -n taskflow
 # Look for: Disruptions Allowed
 
 # Simulate a drain (without actually draining the node)
-kubectl get pods -n taskflow -o wide   # Note which pods are on which node
 kubectl cordon minikube                 # Mark node as unschedulable
 kubectl drain minikube --ignore-daemonsets --delete-emptydir-data
 # Watch: pods evicted one at a time, not all at once
@@ -282,13 +276,9 @@ kubectl uncordon minikube              # Restore node scheduling
 
 # ── Part 3: Resource Inspection ─────────────────────────────
 
-# See current CPU/memory usage for all pods
 kubectl top pods -n taskflow
-
-# See node resource usage
 kubectl top nodes
 
-# See resource requests/limits for all containers
 kubectl describe pod <api-pod-name> -n taskflow | grep -A 10 "Limits\|Requests"
 ```
 
@@ -300,29 +290,3 @@ kubectl describe pod <api-pod-name> -n taskflow | grep -A 10 "Limits\|Requests"
 ---
 
 **Next:** [07 — Observability Architecture →](./07-observability-arch.md)
-
-
-## Raw YAML Reference
-
-### [10-hpa.yaml](../k8s-scripts/10-hpa.yaml) — Autoscaling
-**WHAT IS HPA?**
-HPA automatically scales the number of pod replicas based on observed CPU/memory utilisation (or custom metrics).
-
-**THE SCALING LOOP:**
-  1. `metrics-server` scrapes CPU/memory from every pod every 15s
-  2. HPA controller reads metrics every 15s
-  3. Calculates: `desiredReplicas = ceil(currentReplicas × (currentUsage / targetUsage))`
-  4. Patches the Deployment's replicas field
-
-**COOLDOWN PERIODS:**
-Scale-up waits 3 minutes after last scale-up before scaling up again. Scale-down waits 5 minutes (default) — more conservative to prevent flapping.
-
-### [11-pdb.yaml](../k8s-scripts/11-pdb.yaml) — Disruption Budgets
-**WHAT IS A PDB?**
-A PodDisruptionBudget limits how many pods of an application can be voluntarily disrupted at the same time.
-
-**VOLUNTARY vs INVOLUNTARY DISRUPTION:**
-  - **Voluntary (PDB applies):** Node drain (`kubectl drain`) for maintenance, Node upgrade
-  - **Involuntary (PDB does NOT apply):** Node hardware failure, OOMKilled, Pod crash
-
-With 3 API replicas and `maxUnavailable: 1`, a node drain can take down AT MOST 1 pod at a time. The drain blocks until a replacement pod is Running, ensuring no downtime during maintenance.

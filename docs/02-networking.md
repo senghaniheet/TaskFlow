@@ -31,60 +31,95 @@ React Pod → "api:5000" → DNS lookup → ClusterIP 10.96.10.1
                                         [api-pod-3:5000]
 ```
 
-The ClusterIP Service acts as a **load balancer** across all matching pods. kube-proxy (running on every node) manages the iptables rules that make this work.
+The ClusterIP Service acts as a **load balancer** across all matching pods.
 
 ### Selector: How Services Find Pods
 
-The Service uses a **label selector** to find which pods to route to. This is why pods have labels:
+The Service uses a **label selector** to find which pods to route to:
 
 ```yaml
 # The Service watches for pods with these labels:
 selector:
-  app.kubernetes.io/name: taskflow
   app: api
 
 # The Deployment creates pods WITH these labels:
 template:
   metadata:
     labels:
-      app.kubernetes.io/name: taskflow
-      app: api          # ← matches the Service selector
+      app: api   # ← matches the Service selector
 ```
 
-When a new pod starts with matching labels, the Service automatically starts routing to it. When a pod dies, the Service stops routing to it within seconds.
+When a new pod starts with matching labels, the Service automatically starts routing to it.
 
----
-
-## Kubernetes DNS: How `mongo:27017` Works
+### Kubernetes DNS: How `mongo:27017` Works
 
 Every Service gets a DNS entry automatically:
-
 ```
 Format:   <service-name>.<namespace>.svc.cluster.local
 Example:  mongo.taskflow.svc.cluster.local
 
 Short form (within same namespace):
-  mongo              ← resolves to the same address!
+  mongo   ← resolves to the same address
 ```
 
-This is why `values.yaml` has:
-```yaml
-mongoUri: "mongodb://mongo:27017/taskflow"
-```
-
-Not an IP address. Not `localhost`. The string `"mongo"` resolves to the MongoDB Service's ClusterIP from inside any pod in the `taskflow` namespace.
+This is why `values.yaml` has `mongoUri: "mongodb://mongo:27017/taskflow"` — not an IP address.
 
 ### Headless Services (for StatefulSets)
 
-A regular ClusterIP returns one virtual IP for all pods. A **Headless Service** (`clusterIP: None`) returns the actual IPs of each individual pod:
+A regular ClusterIP returns one virtual IP for all pods. A **Headless Service** (`clusterIP: None`) returns the actual IP of each individual pod:
 
 ```
-Regular Service:   mongo.taskflow.svc  → 10.96.5.1 (virtual, load balanced)
-Headless Service:  mongo.taskflow.svc  → [10.244.0.5, 10.244.0.8] (real pod IPs)
-                   mongo-0.mongo.taskflow.svc → 10.244.0.5 (specific pod!)
+Regular Service:   mongo.taskflow.svc → 10.96.5.1 (virtual, load balanced)
+Headless Service:  mongo-0.mongo.taskflow.svc → 10.244.0.5 (specific pod!)
 ```
 
-StatefulSets need headless services so each pod gets a **stable, addressable DNS name**.
+StatefulSets need headless services so each pod gets a stable, individually addressable DNS name.
+
+### Raw YAML ([k8s-scripts/04-service-clusterip.yaml](../k8s-scripts/04-service-clusterip.yaml))
+
+```yaml
+# ── API Service ──────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: api                   # DNS inside the cluster: api.taskflow.svc.cluster.local
+  namespace: taskflow
+spec:
+  type: ClusterIP             # Internal-only; not reachable from outside the cluster
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+  selector:
+    app: api                  # Routes to all pods carrying this label
+
+---
+# ── MongoDB Headless Service ─────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: taskflow
+spec:
+  clusterIP: None             # Headless — individual pod DNS entries instead of a VIP
+  ports:
+    - port: 27017
+      targetPort: 27017
+  selector:
+    app: mongo
+```
+
+**Helm equivalent** ([helm/taskflow/templates/api-service.yaml](../helm/taskflow/templates/api-service.yaml)):
+```yaml
+metadata:
+  name: {{ include "taskflow.fullname" . }}-api
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+  selector:
+    app: api
+```
 
 ---
 
@@ -101,18 +136,34 @@ External client → NodeIP:30500 → kube-proxy → Service → Pod
 - **Not recommended for production HTTP** — use Ingress instead
 
 ```bash
-# Access in Minikube
 minikube ip           # → 192.168.49.2
 curl http://192.168.49.2:30500/api/health
+```
+
+### Raw YAML ([k8s-scripts/05-service-nodeport.yaml](../k8s-scripts/05-service-nodeport.yaml))
+
+```yaml
+# for development/testing only; use Ingress in production
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-nodeport
+  namespace: taskflow
+spec:
+  type: NodePort
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30500     # Static port on every node (valid range: 30000–32767)
+  selector:
+    app: api
 ```
 
 ---
 
 ## Ingress — The Smart HTTP Router
 
-An Ingress is an API object that manages **HTTP/HTTPS routing** from outside the cluster to Services inside.
-
-Think of it as a programmatic Nginx config that K8s manages for you.
+An Ingress manages **HTTP/HTTPS routing** from outside the cluster to Services inside. Think of it as a programmatic Nginx config that Kubernetes manages for you.
 
 ```
 Browser: http://taskflow.local/api/workspaces
@@ -125,38 +176,59 @@ Browser: http://taskflow.local/api/workspaces
   ↓ Response returned to browser
 ```
 
-### The Ingress Controller
-
 An Ingress **object** (YAML) is just configuration. You also need an **Ingress Controller** — the actual running reverse proxy. This project uses Nginx:
 
 ```bash
 minikube addons enable ingress
-# This installs the Nginx Ingress Controller as a Deployment in ingress-nginx namespace
 ```
 
-### Path Routing Rules
+### Raw YAML ([k8s-scripts/06-ingress.yaml](../k8s-scripts/06-ingress.yaml))
 
 ```yaml
-rules:
-  - host: "taskflow.local"
-    http:
-      paths:
-        - path: /api          # More specific path first
-          pathType: Prefix    # Matches /api, /api/health, /api/tasks...
-          backend:
-            service:
-              name: api
-              port: 5000
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: taskflow-ingress
+  namespace: taskflow
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx     # Selects the Nginx Ingress Controller
 
-        - path: /             # Catch-all last
-          pathType: Prefix
-          backend:
-            service:
-              name: web
-              port: 80
+  rules:
+    - host: "taskflow.local"
+      http:
+        paths:
+          # More specific path must come first — evaluated top to bottom
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 5000
+
+          - path: /
+            pathType: Prefix  # Catch-all
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
 ```
 
-**Order matters:** K8s evaluates rules top to bottom. `/api` must come before `/` or all requests would match the catch-all.
+**Helm equivalent** ([helm/taskflow/templates/ingress.yaml](../helm/taskflow/templates/ingress.yaml)):
+```yaml
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "{{ .Values.ingress.host }}"
+      http:
+        paths:
+          - path: /api → backend: api:5000
+          - path: /    → backend: web:80
+```
 
 ---
 
@@ -165,71 +237,24 @@ rules:
 ```
 Browser (outside cluster)
     │
-    │ HTTPS request: taskflow.local/api/workspaces
+    │ HTTP request: taskflow.local/api/workspaces
     ▼
 Minikube Node (192.168.49.2:80)
     │
     ▼
-Nginx Ingress Controller (Pod in ingress-nginx namespace)
-    │ Reads: Ingress taskflow-ingress rules
+Nginx Ingress Controller
     │ Path /api → Service: api:5000
     ▼
-Service: api (ClusterIP 10.96.10.1:5000)
-    │ Load balances across 3 pods
+Service: api (ClusterIP — load balances across 3 pods)
     ▼
 One of: [taskflow-api-pod-1] or [taskflow-api-pod-2] or [taskflow-api-pod-3]
     │
     │ MongoDB query: mongodb://mongo:27017
     ▼
-Service: mongo (ClusterIP)
+Service: mongo (Headless)
     ▼
 StatefulSet Pod: taskflow-mongo-0
 ```
-
----
-
-## 🔍 In This Project
-
-### API Service
-**File:** [`helm/taskflow/templates/api-service.yaml`](../helm/taskflow/templates/api-service.yaml)
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: api           # ← DNS: api.taskflow.svc.cluster.local
-spec:
-  type: ClusterIP     # ← Internal only
-  ports:
-    - name: http
-      port: 5000
-      targetPort: 5000
-  selector:
-    app: api          # ← Routes to pods labelled app=api
-```
-
-**Raw YAML version:** [`k8s-scripts/04-service-clusterip.yaml`](../k8s-scripts/04-service-clusterip.yaml)
-
-### MongoDB Service (Headless)
-**File:** [`helm/taskflow/templates/mongo-service.yaml`](../helm/taskflow/templates/mongo-service.yaml)
-
-Notice this file also handles `externalIP` — you can point `mongo` Service at an external MongoDB instance without changing any app code. Just update `values.yaml`.
-
-### Ingress
-**File:** [`helm/taskflow/templates/ingress.yaml`](../helm/taskflow/templates/ingress.yaml)
-
-```yaml
-spec:
-  ingressClassName: nginx   # ← Which Ingress Controller handles this
-  rules:
-    - host: "taskflow.local"
-      http:
-        paths:
-          - path: /api → backend: api:5000
-          - path: /    → backend: web:80
-```
-
-**Raw YAML version:** [`k8s-scripts/06-ingress.yaml`](../k8s-scripts/06-ingress.yaml)
 
 ---
 
@@ -251,7 +276,6 @@ kubectl get endpoints api -n taskflow
 
 # ── Part 2: Test Internal DNS ────────────────────────────────
 
-# Get a shell inside the API container
 kubectl exec -it <api-pod-name> -n taskflow -- sh
 
 # Inside the pod — test DNS resolution
@@ -266,18 +290,14 @@ exit
 curl http://taskflow.local/api/health
 curl http://taskflow.local/api/workspaces
 
-# Inspect the Ingress configuration
 kubectl describe ingress -n taskflow
 # Look for: Rules, Backend, Endpoints
 
 # ── Part 4: Watch Load Balancing ─────────────────────────────
 
-# Make 10 requests and see which pods handle them
-for i in $(seq 1 10); do curl -s http://taskflow.local/api/health; done
-
-# In another terminal, watch logs across all API pods
+# Watch logs across all API pods simultaneously
 kubectl logs -l app=api -n taskflow -f --max-log-requests=10
-# Notice: different pods will show log lines for each request
+# Make several requests and notice different pods handling them
 ```
 
 **What to notice:**
@@ -289,38 +309,3 @@ kubectl logs -l app=api -n taskflow -f --max-log-requests=10
 ---
 
 **Next:** [03 — Configuration: ConfigMaps and Secrets →](./03-configuration.md)
-
-
-## Raw YAML Reference
-
-### [04-service-clusterip.yaml](../k8s-scripts/04-service-clusterip.yaml) — Internal Networking
-**WHAT IS A SERVICE?**
-Pods come and go (IPs change every time). A Service gives your pods a STABLE IP and DNS name that never changes.
-
-**CLUSTERIP (default):**
-  - Creates a virtual IP that is only reachable INSIDE the cluster
-  - Acts as a load balancer across all matching pods
-
-**HEADLESS SERVICE:**
-A Headless Service (`clusterIP: None`) does NOT create a virtual IP. Instead, DNS returns the direct IP of each pod. Required by StatefulSets for stable per-pod DNS (e.g. `mongo-0.mongo.taskflow.svc`).
-
-### [05-service-nodeport.yaml](../k8s-scripts/05-service-nodeport.yaml) — External Access
-**NODEPORT:**
-Exposes the Service on a static port (30000-32767) on EVERY node.
-External traffic → NodeIP:NodePort → Service → Pod
-
-When to use NodePort:
-  - ✅ Development / Minikube (quick external access without Ingress)
-  - ✅ Non-HTTP protocols (gRPC, TCP)
-  - ❌ Production: use LoadBalancer or Ingress instead
-
-### [06-ingress.yaml](../k8s-scripts/06-ingress.yaml) — HTTP Routing
-**WHAT IS AN INGRESS?**
-An Ingress is an API object that manages external HTTP/HTTPS access to services inside the cluster. It acts as a SMART REVERSE PROXY.
-
-**WHY INGRESS OVER NodePort?**
-  - NodePort: one port per service (messy, limited range)
-  - Ingress: ONE entry point for ALL services, routed by path/host
-
-**HOW IT WORKS:**
-Browser → DNS → Nginx Ingress Controller → Ingress rules → route to correct Service → Pod

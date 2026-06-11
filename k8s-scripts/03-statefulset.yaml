@@ -1,7 +1,4 @@
-# 03-statefulset.yaml — Raw Kubernetes YAML
-# See README.md in this folder for full explanation.
-
-
+# 03-statefulset.yaml
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -11,11 +8,8 @@ metadata:
     app.kubernetes.io/name: taskflow
     app: mongo
 spec:
-  # The headless service that gives stable DNS to each pod.
-  # See 04-service-clusterip.yaml for a headless service example.
-  serviceName: taskflow-mongo
-
-  replicas: 1         # For this project, 1 replica (not clustered)
+  serviceName: taskflow-mongo  # Required: links to the headless Service for stable DNS
+  replicas: 1
 
   selector:
     matchLabels:
@@ -30,14 +24,14 @@ spec:
     spec:
       containers:
         - name: mongo
-          image: mongo:7                  # Official MongoDB 7 image
-          imagePullPolicy: IfNotPresent   # Use cached image if available
+          image: mongo:7
+          imagePullPolicy: IfNotPresent
 
           securityContext:
             allowPrivilegeEscalation: false
 
           ports:
-            - containerPort: 27017        # MongoDB default port
+            - containerPort: 27017
 
           resources:
             requests:
@@ -47,15 +41,11 @@ spec:
               cpu: 500m
               memory: 512Mi
 
-          # Mount the persistent volume at MongoDB's data directory.
-          # When mongo-0 is restarted, it will find its data here.
           volumeMounts:
             - name: mongo-storage
-              mountPath: /data/db         # MongoDB stores all data here
+              mountPath: /data/db   # MongoDB stores all data here; must persist across restarts
 
-      # Reference the PVC created in 09-pvc.yaml
-      # The PVC will hold MongoDB's data across pod restarts.
       volumes:
         - name: mongo-storage
           persistentVolumeClaim:
-            claimName: taskflow-mongo-pvc  # See 09-pvc.yaml
+            claimName: taskflow-mongo-pvc

@@ -89,9 +89,42 @@ A Kubernetes cluster has two types of machines:
 
 | Component | Role |
 |-----------|------|
-| **Kubelet** | Agent on every node. Receives pod specs from the API Server and starts containers. Also runs cAdvisor for metrics. |
+| **Kubelet** | Agent on every node. Receives pod specs from the API Server and starts containers. |
 | **kube-proxy** | Manages network rules (iptables/IPVS) for Service traffic routing. |
 | **Container Runtime** | Actually runs containers (containerd, CRI-O). Docker is not used in modern K8s. |
+
+---
+
+## Namespaces — Virtual Clusters
+
+A Namespace is a logical partition inside a cluster. Think of it like folders: resources in different namespaces are isolated from each other.
+
+```
+taskflow      → the application (API, Web, MongoDB)
+monitoring    → observability stack (Prometheus, Grafana, Loki, Tempo)
+ingress-nginx → the Nginx Ingress Controller
+kube-system   → Kubernetes internal components
+```
+
+**Raw YAML** ([k8s-scripts/00-namespace.yaml](../k8s-scripts/00-namespace.yaml)):
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: taskflow
+  labels:
+    # key=value pairs used for grouping and filtering resources
+    app.kubernetes.io/managed-by: helm
+    environment: production
+```
+
+**Helm equivalent** ([helm/taskflow/templates/namespace.yaml](../helm/taskflow/templates/namespace.yaml)):
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}   # → "taskflow" from values.yaml
+```
 
 ---
 
@@ -147,7 +180,7 @@ kubectl rollout status deployment/taskflow-api -n taskflow
 
 ## 🖥️ Minikube: Local K8s Cluster
 
-Minikube runs a **single-node** Kubernetes cluster inside a VM or container on your laptop. It's the easiest way to learn K8s locally.
+Minikube runs a **single-node** Kubernetes cluster inside a VM or container on your laptop.
 
 ### How It Differs from Production
 
@@ -166,32 +199,12 @@ minikube start --cpus=4 --memory=6144   # Start with enough resources
 minikube status                          # Check if it's running
 minikube ip                              # Get the cluster IP (for /etc/hosts)
 minikube ssh                             # SSH into the Minikube VM
-minikube addons list                     # See available addons
 minikube addons enable ingress           # Enable Nginx Ingress Controller
 minikube addons enable metrics-server    # Required for HPA
 minikube image load <image>              # Load a local Docker image (skip registry)
 minikube stop                            # Stop without destroying
 minikube delete                          # Destroy the cluster
 ```
-
----
-
-## 🔍 In This Project
-
-**File:** [`helm/taskflow/templates/namespace.yaml`](../helm/taskflow/templates/namespace.yaml)
-
-The project's namespace is created by the Helm chart:
-
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ .Values.namespace }}
-```
-
-`{{ .Values.namespace }}` gets replaced with `taskflow` from `values.yaml` at deploy time.
-
-**Raw YAML version:** [`k8s-scripts/00-namespace.yaml`](../k8s-scripts/00-namespace.yaml)
 
 ---
 

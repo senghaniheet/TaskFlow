@@ -21,13 +21,6 @@ Kubernetes provides two resources for this: **ConfigMap** (non-sensitive) and **
 
 A ConfigMap is a dictionary of key-value pairs for configuration that is **safe to version-control**.
 
-```yaml
-data:
-  NODE_ENV: "production"
-  PORT: "5000"
-  LOG_LEVEL: "http"
-```
-
 ### Three Ways to Use a ConfigMap
 
 **Method 1: All keys as environment variables (what this project uses)**
@@ -60,6 +53,42 @@ volumes:
 # Creates /app/config/NODE_ENV, /app/config/PORT as files
 ```
 
+### Raw YAML ([k8s-scripts/07-configmap.yaml](../k8s-scripts/07-configmap.yaml))
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskflow-api-config   # Referenced in Deployment's envFrom → configMapRef
+  namespace: taskflow
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  LOG_LEVEL: "http"           # Winston levels: http | info | warn | error
+  JWT_EXPIRES_IN: "1d"
+  ALLOWED_ORIGINS: "http://localhost:8080,http://taskflow.local"
+  DISABLE_RATE_LIMIT: "false"
+
+  # OTel vars — only included when otelEnabled="true" in Helm values
+  # NODE_OPTIONS bootstraps the tracer before index.js loads (required for ESM)
+  NODE_OPTIONS: "--import ./src/instrumentation.js"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.monitoring.svc.cluster.local:4317"
+  OTEL_SERVICE_NAME: "taskflow-api"
+```
+
+**Helm equivalent** ([helm/taskflow/templates/api-configmap.yaml](../helm/taskflow/templates/api-configmap.yaml)):
+```yaml
+data:
+  NODE_ENV: {{ .Values.api.env.nodeEnv | quote }}
+  PORT: {{ .Values.api.env.port | quote }}
+  LOG_LEVEL: {{ .Values.api.env.logLevel | default "info" | quote }}
+  {{- if eq .Values.api.env.otelEnabled "true" }}
+  NODE_OPTIONS: "--import ./src/instrumentation.js"
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.api.env.otelExporterOtlpEndpoint | quote }}
+  OTEL_SERVICE_NAME: "taskflow-api"
+  {{- end }}
+```
+
 ---
 
 ## Secret — Sensitive Credentials
@@ -89,27 +118,34 @@ echo "bXktand0LXNlY3JldA==" | base64 -d
 | Better | Sealed Secrets | Asymmetric encryption. Safe to commit encrypted secrets to Git |
 | Best | Vault / Cloud | HashiCorp Vault or AWS/GCP Secrets Manager. Secrets injected at runtime |
 
-For this project (local dev), K8s Secrets are sufficient.
-
-### stringData vs data
+### Raw YAML ([k8s-scripts/08-secret.yaml](../k8s-scripts/08-secret.yaml))
 
 ```yaml
-# stringData: write plaintext → K8s encodes it automatically
-stringData:
-  JWT_SECRET: "my-plaintext-secret"
+# base64 is encoding, not encryption — anyone with kubectl access can decode these
+# In production, use Sealed Secrets or a Vault integration instead
+apiVersion: v1
+kind: Secret
+metadata:
+  name: taskflow-api-secret   # Referenced in Deployment's envFrom → secretRef
+  namespace: taskflow
+type: Opaque                  # Generic key-value secret type
 
-# data: you pre-encode with base64
-data:
-  JWT_SECRET: "bXktcGxhaW50ZXh0LXNlY3JldA=="
+stringData:                   # Write plaintext here; K8s encodes it on save
+  JWT_SECRET: "REPLACE_WITH_CRYPTOGRAPHICALLY_SECURE_RANDOM_STRING"
+  MONGO_URI: "mongodb://mongo:27017/taskflow"
 ```
 
-Always use `stringData` when writing YAML by hand — it's less error-prone.
+**Helm equivalent** ([helm/taskflow/templates/api-secret.yaml](../helm/taskflow/templates/api-secret.yaml)):
+```yaml
+type: Opaque
+stringData:
+  JWT_SECRET: {{ .Values.api.env.jwtSecret | quote }}
+  MONGO_URI: {{ .Values.api.env.mongoUri | quote }}
+```
 
 ---
 
 ## The Helm Values → ConfigMap/Secret Pipeline
-
-This is the full flow from `values.yaml` to the running container:
 
 ```
 helm/taskflow/values.yaml
@@ -125,7 +161,6 @@ helm/taskflow/templates/api-configmap.yaml
 helm/taskflow/templates/api-secret.yaml
   stringData:
     JWT_SECRET: "abc123"             ← injected via --set at deploy time
-    MONGO_URI: "mongodb://..."
          ↓  kubectl apply
 Kubernetes API Server stores ConfigMap + Secret in etcd
          ↓  Pod starts
@@ -134,6 +169,23 @@ Container environment:
   process.env.JWT_SECRET = "abc123"
   process.env.MONGO_URI = "mongodb://..."
 ```
+
+---
+
+## The Checksum Trick: Force Restart on Config Change
+
+Kubernetes does **not** automatically restart pods when a ConfigMap or Secret changes. New pods created after the change will get the new config. Existing pods won't.
+
+This project solves it with **checksum annotations**:
+
+```yaml
+# In api-deployment.yaml:
+annotations:
+  checksum/config: {{ include (print $.Template.BasePath "/api-configmap.yaml") . | sha256sum }}
+  checksum/secret: {{ include (print $.Template.BasePath "/api-secret.yaml") . | sha256sum }}
+```
+
+When the ConfigMap content changes → its sha256 hash changes → the annotation changes → Kubernetes detects a change in the Pod spec → triggers a rolling update → all pods reload the new config.
 
 ---
 
@@ -155,67 +207,7 @@ This is **feature-flagging via ConfigMap + Helm**. To disable tracing without co
 helm upgrade taskflow ./helm/taskflow --set api.env.otelEnabled="false"
 ```
 
-The ConfigMap is regenerated without the OTel variables. The checksum annotation triggers a rolling restart. The pods come back without tracing enabled. Zero code changes, zero image rebuilds.
-
----
-
-## The Checksum Trick: Force Restart on Config Change
-
-Kubernetes does **not** automatically restart pods when a ConfigMap or Secret changes. New pods created after the change will get the new config. Existing pods won't.
-
-This project solves it with **checksum annotations**:
-
-```yaml
-# In api-deployment.yaml:
-annotations:
-  checksum/config: {{ include (print $.Template.BasePath "/api-configmap.yaml") . | sha256sum }}
-  checksum/secret: {{ include (print $.Template.BasePath "/api-secret.yaml") . | sha256sum }}
-```
-
-When the ConfigMap content changes → its sha256 hash changes → the annotation changes → Kubernetes detects a change in the Pod spec → triggers a rolling update → all pods reload the new config.
-
----
-
-## 🔍 In This Project
-
-### ConfigMap
-**File:** [`helm/taskflow/templates/api-configmap.yaml`](../helm/taskflow/templates/api-configmap.yaml)
-
-```yaml
-data:
-  NODE_ENV: {{ .Values.api.env.nodeEnv | quote }}
-  PORT: {{ .Values.api.env.port | quote }}
-  LOG_LEVEL: {{ .Values.api.env.logLevel | default "info" | quote }}
-  {{- if eq .Values.api.env.otelEnabled "true" }}
-  NODE_OPTIONS: "--import ./src/instrumentation.js"
-  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.api.env.otelExporterOtlpEndpoint | quote }}
-  OTEL_SERVICE_NAME: "taskflow-api"
-  {{- end }}
-```
-
-**Raw YAML version:** [`k8s-scripts/07-configmap.yaml`](../k8s-scripts/07-configmap.yaml)
-
-### Secret
-**File:** [`helm/taskflow/templates/api-secret.yaml`](../helm/taskflow/templates/api-secret.yaml)
-
-```yaml
-type: Opaque
-stringData:
-  JWT_SECRET: {{ .Values.api.env.jwtSecret | quote }}
-  MONGO_URI: {{ .Values.api.env.mongoUri | quote }}
-```
-
-**Raw YAML version:** [`k8s-scripts/08-secret.yaml`](../k8s-scripts/08-secret.yaml)
-
-### Values
-**File:** [`helm/taskflow/values.yaml`](../helm/taskflow/values.yaml)
-```yaml
-api:
-  env:
-    jwtSecret: ""      # ← set this at deploy time, never commit
-    otelEnabled: "true"
-    otelExporterOtlpEndpoint: "http://tempo.monitoring.svc.cluster.local:4317"
-```
+The ConfigMap is regenerated without the OTel variables. The checksum annotation triggers a rolling restart. Zero code changes, zero image rebuilds.
 
 ---
 
@@ -226,7 +218,6 @@ api:
 ```bash
 # ── Part 1: Inspect Current Config ──────────────────────────
 
-# View the ConfigMap
 kubectl get configmap -n taskflow
 kubectl describe configmap taskflow-api-config -n taskflow
 
@@ -256,12 +247,10 @@ kubectl exec -it <new-api-pod-name> -n taskflow -- env | grep LOG_LEVEL
 
 # ── Part 3: Toggle OpenTelemetry Off ─────────────────────────
 
-# Disable tracing (no code change, no image rebuild)
 helm upgrade taskflow ./helm/taskflow \
   --namespace taskflow \
   --set api.env.otelEnabled="false"
 
-# Verify OTel vars are gone from the pod
 kubectl exec -it <api-pod-name> -n taskflow -- env | grep OTEL
 # Should return nothing
 
@@ -277,28 +266,3 @@ helm upgrade taskflow ./helm/taskflow --set api.env.otelEnabled="true"
 ---
 
 **Next:** [04 — Storage: PV, PVC, and StorageClass →](./04-storage.md)
-
-
-## Raw YAML Reference
-
-### [07-configmap.yaml](../k8s-scripts/07-configmap.yaml) — Non-Sensitive Config
-**WHAT IS A CONFIGMAP?**
-A ConfigMap stores key-value pairs of non-sensitive configuration data. It decouples config from container images.
-
-**GOLDEN RULE:**
-  - ConfigMap  → non-sensitive config (`NODE_ENV`, `PORT`)
-  - Secret     → sensitive credentials (`JWT_SECRET`, `MONGO_URI`)
-
-**THE CHECKSUM TRICK:**
-When a ConfigMap changes, pods won't restart automatically. The Helm checksum annotation forces a rolling restart so the new configuration takes effect.
-
-### [08-secret.yaml](../k8s-scripts/08-secret.yaml) — Sensitive Credentials
-**WHAT IS A SECRET?**
-A Secret is like a ConfigMap but for sensitive data. It stores data as base64-encoded strings.
-
-**IMPORTANT: Base64 is ENCODING, not ENCRYPTION.**
-Anyone with cluster access can decode it! Real security in production uses Sealed Secrets, HashiCorp Vault, or Cloud Secrets Managers.
-
-**TYPES SHOWN HERE:**
-  - `stringData`: write plaintext → K8s base64-encodes it for you
-  - `data`: you must pre-encode with: `echo -n "value" | base64`

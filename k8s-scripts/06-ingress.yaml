@@ -1,7 +1,4 @@
-# 06-ingress.yaml — Raw Kubernetes YAML
-# See README.md in this folder for full explanation.
-
-
+# 06-ingress.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -11,27 +8,25 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
     nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
-  # Which Ingress Controller handles this Ingress object
-  ingressClassName: nginx
+  ingressClassName: nginx     # Selects the Nginx Ingress Controller to handle this resource
 
   rules:
-    - host: "taskflow.local"     # Virtual host — must match Host header in requests
+    - host: "taskflow.local"
       http:
         paths:
-          # Rule 1: /api/* → API service (more specific path first)
+          # More specific path must come first — evaluated top to bottom
           - path: /api
-            pathType: Prefix     # Matches /api, /api/health, /api/tasks, etc.
+            pathType: Prefix
             backend:
               service:
-                name: api        # The ClusterIP Service from 04-service-clusterip.yaml
+                name: api
                 port:
                   number: 5000
 
-          # Rule 2: / → Web (frontend)
           - path: /
-            pathType: Prefix     # Catch-all: matches everything else
+            pathType: Prefix  # Catch-all: matches everything not matched above
             backend:
               service:
-                name: web        # The React app served by Nginx
+                name: web
                 port:
                   number: 80

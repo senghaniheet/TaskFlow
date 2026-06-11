@@ -1,24 +1,20 @@
-# 01-pod.yaml — Raw Kubernetes YAML
-# See README.md in this folder for full explanation.
-
-
+# 01-pod.yaml — for learning only; use a Deployment in production
 apiVersion: v1
 kind: Pod
 metadata:
-  name: taskflow-api-pod        # Unique name within the namespace
+  name: taskflow-api-pod
   namespace: taskflow
   labels:
-    app: api                    # Used by Services to find this Pod via selector
+    app: api                    # Services use this label to find and route to this pod
 spec:
   containers:
-    - name: api                 # Container name (visible in logs, describe)
+    - name: api
       image: ghcr.io/senghaniheet/taskflow-api:latest
-      imagePullPolicy: Never    # Use local Minikube image (skip registry pull)
+      imagePullPolicy: Never    # Use the locally loaded Minikube image
 
       ports:
-        - containerPort: 5000   # Just documentation — doesn't actually open the port
+        - containerPort: 5000   # Documentation only — does not open the port
 
-      # Environment variables injected into the container process
       env:
         - name: NODE_ENV
           value: "production"
@@ -27,33 +23,27 @@ spec:
         - name: MONGO_URI
           value: "mongodb://mongo:27017/taskflow"
         - name: JWT_SECRET
-          value: "my-super-secret-key"   # ← NEVER hardcode secrets like this!
+          value: "replace-me"   # Never hardcode real secrets — use a Secret resource
 
-      # Resource Requests: minimum guaranteed resources
-      # Resource Limits: hard ceiling — container is killed if exceeded (OOMKilled)
       resources:
         requests:
-          cpu: 200m              # 200 millicores = 0.2 CPU cores
+          cpu: 200m             # 200 millicores = 0.2 of one CPU core
           memory: 128Mi
         limits:
-          cpu: 1000m             # 1 full CPU core max
-          memory: 512Mi
+          cpu: 1000m            # 1000m = 1 full CPU core; container is throttled if exceeded
+          memory: 512Mi         # Container is OOMKilled if it exceeds this
 
-      # Readiness Probe: Is the container ready to receive traffic?
-      # K8s won't route requests to this Pod until this passes.
       readinessProbe:
         httpGet:
           path: /api/health
           port: 5000
-        initialDelaySeconds: 5   # Wait 5s before first check
-        periodSeconds: 10        # Check every 10s
+        initialDelaySeconds: 5
+        periodSeconds: 10
 
-      # Liveness Probe: Is the container still alive?
-      # If this fails repeatedly, K8s restarts the container.
       livenessProbe:
         httpGet:
           path: /api/health
           port: 5000
         initialDelaySeconds: 15
         periodSeconds: 15
-        failureThreshold: 5      # Restart after 5 consecutive failures
+        failureThreshold: 5     # Container is restarted after 5 consecutive failures
