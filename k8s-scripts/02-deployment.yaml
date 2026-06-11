@@ -1,0 +1,93 @@
+# 02-deployment.yaml — Raw Kubernetes YAML
+# See README.md in this folder for full explanation.
+
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-api          # Release name injected by Helm in the real chart
+  namespace: taskflow
+  labels:
+    app.kubernetes.io/name: taskflow
+    app.kubernetes.io/instance: taskflow
+    app: api
+spec:
+  replicas: 3                 # 3 pod instances will always run
+
+  # Rolling update strategy — the key to zero-downtime deploys
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1             # Allow 1 extra pod to be created during update
+      maxUnavailable: 0       # Never allow a pod to go down before replacement is ready
+
+  # Selector: tells the Deployment which Pods it "owns"
+  # Must match the template.metadata.labels below
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskflow
+      app.kubernetes.io/instance: taskflow
+      app: api
+
+  # Pod Template: the blueprint for each replica Pod
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: taskflow
+        app.kubernetes.io/instance: taskflow
+        app: api
+      annotations:
+        # CHECKSUM TRICK: Force pod restart when ConfigMap/Secret changes.
+        # Without this, updating a ConfigMap won't restart existing pods.
+        # Helm computes the sha256 of each file and stores it as annotation.
+        # When the annotation changes, K8s treats it as a new pod spec → rolling update.
+        checksum/config: "abc123..."  # Helm computes this at deploy time
+        checksum/secret: "def456..."
+
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/senghaniheet/taskflow-api:latest
+          imagePullPolicy: Always   # Always pull — enables CI/CD (new :latest = new image)
+
+          securityContext:
+            allowPrivilegeEscalation: false  # Security hardening
+
+          ports:
+            - containerPort: 5000
+
+          # Load ALL env vars from a ConfigMap (non-sensitive config)
+          # Load ALL env vars from a Secret (sensitive credentials)
+          # This keeps the Deployment YAML clean — no hardcoded values.
+          envFrom:
+            - configMapRef:
+                name: taskflow-api-config   # See 07-configmap.yaml
+            - secretRef:
+                name: taskflow-api-secret   # See 08-secret.yaml
+
+          resources:
+            requests:
+              cpu: 200m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 8
+            successThreshold: 1
+            failureThreshold: 5

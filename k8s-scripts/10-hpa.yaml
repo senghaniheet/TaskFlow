@@ -1,0 +1,37 @@
+# 10-hpa.yaml — Raw Kubernetes YAML
+# See README.md in this folder for full explanation.
+
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: taskflow-api-hpa
+  namespace: taskflow
+  labels:
+    app: api
+spec:
+  # Which resource to scale
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: taskflow-api          # Must match the Deployment name exactly
+
+  minReplicas: 3               # Never go below 3 (reliability floor)
+  maxReplicas: 10              # Never go above 10 (cost ceiling)
+
+  metrics:
+    # Metric 1: Scale on CPU utilisation
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60  # Scale up when average CPU > 60%
+
+    # Metric 2: Scale on Memory utilisation
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80  # Scale up when average memory > 80%

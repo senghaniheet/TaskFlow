@@ -1,0 +1,13 @@
+# 00-namespace.yaml — Raw Kubernetes YAML
+# See README.md in this folder for full explanation.
+
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: taskflow
+  labels:
+    # Labels are key-value pairs for grouping/selecting resources.
+    # These are visible in: kubectl get ns --show-labels
+    app.kubernetes.io/managed-by: helm
+    environment: production

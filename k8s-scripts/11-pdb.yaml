@@ -1,0 +1,21 @@
+# 11-pdb.yaml — Raw Kubernetes YAML
+# See README.md in this folder for full explanation.
+
+
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: taskflow-api-pdb
+  namespace: taskflow
+  labels:
+    app: api
+spec:
+  # During any voluntary disruption, at most 1 pod may be unavailable.
+  # Equivalent to: always maintain minAvailable = (replicas - 1) = 2
+  maxUnavailable: 1
+
+  # The PDB applies to all pods matching this selector
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: taskflow
+      app: api

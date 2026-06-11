@@ -1,0 +1,40 @@
+# 04-service-clusterip.yaml — Raw Kubernetes YAML
+# See README.md in this folder for full explanation.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: api                   # DNS name: api.taskflow.svc.cluster.local
+  namespace: taskflow
+  labels:
+    app: api
+spec:
+  type: ClusterIP             # Default; internal-only virtual IP
+  ports:
+    - name: http
+      port: 5000              # Port the Service listens on
+      targetPort: 5000        # Port on the Pod to forward to
+  selector:
+    app.kubernetes.io/name: taskflow
+    app: api                  # Routes to all pods with this label
+
+---
+# ── MongoDB Headless Service ─────────────────────────────────
+# A Headless Service (clusterIP: None) does NOT create a virtual IP.
+# Instead, DNS returns the direct IP of each pod.
+# Required by StatefulSets for stable per-pod DNS.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo                 # DNS: mongo.taskflow.svc.cluster.local
+  namespace: taskflow
+  labels:
+    app: mongo
+spec:
+  clusterIP: None             # Headless: no virtual IP, DNS returns pod IPs directly
+  ports:
+    - port: 27017
+      targetPort: 27017
+  selector:
+    app.kubernetes.io/name: taskflow
+    app: mongo

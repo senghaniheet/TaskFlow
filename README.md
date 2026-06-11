@@ -144,7 +144,7 @@ npm run migrate:seed
 
 ## ☸️ Kubernetes Deployment (Full Setup)
 
-> 📖 **Learn the concepts first:** [Kubernetes Core Concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#1-kubernetes-core-concepts) | [Helm Guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#3-helm--kubernetes-package-manager)
+> 📖 **Learn the concepts first:** [00 — Introduction](./docs/00-introduction.md) | [05 — Helm](./docs/05-helm.md)
 
 ### Prerequisites
 
@@ -157,7 +157,7 @@ npm run migrate:seed
 
 ### Step 1 — Start Minikube
 
-> 📖 [Full Minikube setup guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#2-setting-up-minikube-locally)
+> 📖 [Full Minikube setup guide](./docs/00-introduction.md#🖥️-minikube-local-k8s-cluster)
 
 ```bash
 # Start with enough resources for the monitoring stack
@@ -188,7 +188,7 @@ minikube image load ghcr.io/senghaniheet/taskflow-web:latest
 
 ### Step 3 — Deploy with Helm
 
-> 📖 [Helm commands reference](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#key-helm-commands)
+> 📖 [Helm commands reference](./docs/05-helm.md#key-helm-commands)
 
 ```bash
 # Install the full app stack into the 'taskflow' namespace
@@ -255,7 +255,7 @@ helm uninstall taskflow --namespace taskflow
 
 ## 📊 Monitoring Setup (Prometheus + Grafana + Loki + Tempo)
 
-> 📖 [Prometheus concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#8-prometheus--metrics-collection) | [Grafana guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#9-grafana--dashboards--visualization) | [PromQL reference](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#10-promql--querying-metrics) | [Log Aggregation & Tracing](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-6-log-aggregation-loki--promtail)
+> 📖 [Prometheus & Metrics](./docs/08-metrics.md) | [Loki & Logs](./docs/09-logging.md) | [Tempo & Tracing](./docs/10-tracing.md)
 
 ### Step 1 — Install kube-prometheus-stack
 
@@ -374,7 +374,7 @@ Check active alerts at `http://localhost:9090/alerts`.
 
 ## 🔗 Distributed Tracing (OpenTelemetry + Grafana Tempo)
 
-> 📖 [Distributed Tracing Guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-7-distributed-tracing-opentelemetry--tempo)
+> 📖 [Distributed Tracing Guide](./docs/10-tracing.md)
 
 The Node.js API is fully instrumented with OpenTelemetry auto-instrumentation. Every HTTP request and MongoDB query generates a **trace** that is exported to Grafana Tempo via OTLP gRPC.
 
@@ -413,7 +413,7 @@ Grafana Explore  →  Search by Service: taskflow-api
 
 ## ⚡ Autoscaling (HPA)
 
-> 📖 [HPA deep dive](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#6-horizontal-pod-autoscaler-hpa)
+> 📖 [HPA deep dive](./docs/06-reliability.md#hpa-—-horizontal-pod-autoscaler)
 
 The API and Web services both have Horizontal Pod Autoscalers configured in [`helm/taskflow/values.yaml`](./helm/taskflow/values.yaml):
 
@@ -429,7 +429,7 @@ kubectl get hpa -n taskflow -w
 
 **Trigger autoscaling with the k6 load test pod:**
 
-> 📖 [Load testing guide](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#12-load-testing--autoscaling-validation)
+> 📖 [Load testing guide](./docs/12-load-testing.md)
 
 ```bash
 # Create the loadtest ConfigMap (first time only)
@@ -460,7 +460,7 @@ The k6 load test targets these endpoints with randomised traffic:
 
 ## 🛡️ Reliability Features
 
-> 📖 [Pod Disruption Budgets](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#7-pod-disruption-budgets-pdb)
+> 📖 [Pod Disruption Budgets](./docs/06-reliability.md#pdb-—-pod-disruption-budget)
 
 | Feature | Details |
 |---------|---------|
@@ -474,7 +474,7 @@ The k6 load test targets these endpoints with randomised traffic:
 
 ## 🚢 CI/CD Pipeline
 
-> 📖 [CI/CD with GitHub Actions](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#14-cicd-with-github-actions)
+> 📖 [CI/CD with GitHub Actions](./docs/11-cicd.md)
 
 On every push to `main`, GitHub Actions automatically:
 
@@ -559,24 +559,21 @@ npm run test
 
 | Topic | Link |
 |-------|------|
-| Full K8s + Grafana + Prometheus guide | [KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md) |
-| Kubernetes core concepts | [Section 1 — Core Concepts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#1-kubernetes-core-concepts) |
-| Minikube local setup | [Section 2 — Minikube](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#2-setting-up-minikube-locally) |
-| Helm package manager | [Section 3 — Helm](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#3-helm--kubernetes-package-manager) |
-| Deployments vs StatefulSets | [Section 4 — Workloads](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#4-workloads-deployments-vs-statefulsets) |
-| Services & Ingress | [Section 5 — Networking](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#5-services--ingress) |
-| Horizontal Pod Autoscaler | [Section 6 — HPA](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#6-horizontal-pod-autoscaler-hpa) |
-| Pod Disruption Budgets | [Section 7 — PDB](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#7-pod-disruption-budgets-pdb) |
-| Prometheus setup & metrics | [Section 8 — Prometheus](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#8-prometheus--metrics-collection) |
-| Grafana dashboards | [Section 9 — Grafana](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#9-grafana--dashboards--visualization) |
-| PromQL queries | [Section 10 — PromQL](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#10-promql--querying-metrics) |
-| Alert rules | [Section 11 — Alerts](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#11-alert-rules) |
-| Load testing & autoscaling | [Section 12 — Load Testing](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#12-load-testing--autoscaling-validation) |
-| Memory leak detection | [Section 13 — Memory](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#13-memory-leak-detection) |
-| CI/CD with GitHub Actions | [Section 14 — CI/CD](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#14-cicd-with-github-actions) |
-| kubectl & Helm cheatsheet | [Section 15 — Cheatsheet](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#15-quick-reference-cheatsheet) |
-| **Log Aggregation with Loki** | [Phase 6 — Loki & Promtail](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-6-log-aggregation-loki--promtail) |
-| **Distributed Tracing with Tempo** | [Phase 7 — OpenTelemetry & Tempo](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md#phase-7-distributed-tracing-opentelemetry--tempo) |
+| Full Curriculum Index | [KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md) |
+| 00 — Introduction: Docker → Kubernetes | [docs/00-introduction.md](./docs/00-introduction.md) |
+| 01 — Core Workloads: Pods, Deployments, StatefulSets | [docs/01-core-workloads.md](./docs/01-core-workloads.md) |
+| 02 — Networking: Services, Ingress, and DNS | [docs/02-networking.md](./docs/02-networking.md) |
+| 03 — Configuration: ConfigMaps and Secrets | [docs/03-configuration.md](./docs/03-configuration.md) |
+| 04 — Storage: PV, PVC, and StorageClass | [docs/04-storage.md](./docs/04-storage.md) |
+| 05 — Helm: The Package Manager for Kubernetes | [docs/05-helm.md](./docs/05-helm.md) |
+| 06 — Reliability: HPA, PDB, Resource Limits | [docs/06-reliability.md](./docs/06-reliability.md) |
+| 07 — Observability Architecture: The Three Pillars | [docs/07-observability-arch.md](./docs/07-observability-arch.md) |
+| 08 — Metrics: Prometheus and PromQL | [docs/08-metrics.md](./docs/08-metrics.md) |
+| 09 — Logging: Loki, Promtail, and LogQL | [docs/09-logging.md](./docs/09-logging.md) |
+| 10 — Distributed Tracing: OpenTelemetry and Tempo | [docs/10-tracing.md](./docs/10-tracing.md) |
+| 11 — CI/CD: Automated Deployments | [docs/11-cicd.md](./docs/11-cicd.md) |
+| 12 — Load Testing: Validating Autoscaling | [docs/12-load-testing.md](./docs/12-load-testing.md) |
+| Raw YAML Examples (Annotated) | [k8s-scripts/](./k8s-scripts/) |
 
 ---
 

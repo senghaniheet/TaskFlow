@@ -1,0 +1,27 @@
+# 07-configmap.yaml — Raw Kubernetes YAML
+# See README.md in this folder for full explanation.
+
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskflow-api-config   # Referenced by Deployment's envFrom
+  namespace: taskflow
+  labels:
+    app: api
+data:
+  # ── Application Config ──────────────────────────────────────
+  NODE_ENV: "production"
+  PORT: "5000"
+  LOG_LEVEL: "http"           # Winston log level: http | info | warn | error
+  JWT_EXPIRES_IN: "1d"
+  ALLOWED_ORIGINS: "http://localhost:8080,http://taskflow.local"
+  DISABLE_RATE_LIMIT: "false"
+
+  # ── OpenTelemetry Config (conditionally included in Helm) ───
+  # If otelEnabled is "true" in values.yaml, Helm adds these.
+  # NODE_OPTIONS tells Node.js to import the OTel bootstrap before
+  # loading the main app — required for ES Modules.
+  NODE_OPTIONS: "--import ./src/instrumentation.js"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.monitoring.svc.cluster.local:4317"
+  OTEL_SERVICE_NAME: "taskflow-api"
