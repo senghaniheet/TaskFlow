@@ -15,19 +15,19 @@ The documentation has been structured into a 13-part curriculum. Each chapter co
 4. [03 — Configuration: ConfigMaps and Secrets](./docs/03-configuration.md)
 5. [04 — Storage: PV, PVC, and StorageClass](./docs/04-storage.md)
 
-### Phase 2: Helm & Reliability
+### Phase 2: Helm & CI/CD
 6. [05 — Helm: The Package Manager for Kubernetes](./docs/05-helm.md)
-7. [06 — Reliability: HPA, PDB, Resource Limits](./docs/06-reliability.md)
+7. [06 — CI/CD: Automated Deployments](./docs/06-cicd.md)
 
-### Phase 3: Observability Architecture
-8. [07 — Observability Architecture: The Three Pillars](./docs/07-observability-arch.md)
-9. [08 — Metrics: Prometheus and PromQL](./docs/08-metrics.md)
-10. [09 — Logging: Loki, Promtail, and LogQL](./docs/09-logging.md)
-11. [10 — Distributed Tracing: OpenTelemetry and Tempo](./docs/10-tracing.md)
+### Phase 3: Reliability & Observability Architecture
+8. [07 — Reliability: HPA, PDB, Resource Limits](./docs/07-reliability.md)
+9. [08 — Observability Architecture: The Three Pillars](./docs/08-observability-arch.md)
 
-### Phase 4: Automation & Validation
-12. [11 — CI/CD: Automated Deployments](./docs/11-cicd.md)
-13. [12 — Load Testing: Validating Autoscaling](./docs/12-load-testing.md)
+### Phase 4: Load Testing & Telemetry
+10. [09 — Load Testing: Validating Autoscaling](./docs/09-load-testing.md)
+11. [10 — Metrics: Prometheus and PromQL](./docs/10-metrics.md)
+12. [11 — Logging: Loki, Promtail, and LogQL](./docs/11-logging.md)
+13. [12 — Distributed Tracing: OpenTelemetry and Tempo](./docs/12-tracing.md)
 
 ---
 
@@ -39,7 +39,7 @@ This project runs the TaskFlow API (Node.js/Express) and Web UI (React) backed b
 
 ![Observability Architecture](./assets/observability-architecture.png)
 
-*For a deep dive into how every component above communicates, see [07 — Observability Architecture](./docs/07-observability-arch.md).*
+*For a deep dive into how every component above communicates, see [08 — Observability Architecture](./docs/08-observability-arch.md).*
 
 ---
 

@@ -255,7 +255,7 @@ helm uninstall taskflow --namespace taskflow
 
 ## 📊 Monitoring Setup (Prometheus + Grafana + Loki + Tempo)
 
-> 📖 [Prometheus & Metrics](./docs/08-metrics.md) | [Loki & Logs](./docs/09-logging.md) | [Tempo & Tracing](./docs/10-tracing.md)
+> 📖 [Prometheus & Metrics](./docs/10-metrics.md) | [Loki & Logs](./docs/11-logging.md) | [Tempo & Tracing](./docs/12-tracing.md)
 
 ### Step 1 — Install kube-prometheus-stack
 
@@ -374,7 +374,7 @@ Check active alerts at `http://localhost:9090/alerts`.
 
 ## 🔗 Distributed Tracing (OpenTelemetry + Grafana Tempo)
 
-> 📖 [Distributed Tracing Guide](./docs/10-tracing.md)
+> 📖 [Distributed Tracing Guide](./docs/12-tracing.md)
 
 The Node.js API is fully instrumented with OpenTelemetry auto-instrumentation. Every HTTP request and MongoDB query generates a **trace** that is exported to Grafana Tempo via OTLP gRPC.
 
@@ -413,7 +413,7 @@ Grafana Explore  →  Search by Service: taskflow-api
 
 ## ⚡ Autoscaling (HPA)
 
-> 📖 [HPA deep dive](./docs/06-reliability.md#hpa-—-horizontal-pod-autoscaler)
+> 📖 [HPA deep dive](./docs/07-reliability.md#hpa-—-horizontal-pod-autoscaler)
 
 The API and Web services both have Horizontal Pod Autoscalers configured in [`helm/taskflow/values.yaml`](./helm/taskflow/values.yaml):
 
@@ -429,7 +429,7 @@ kubectl get hpa -n taskflow -w
 
 **Trigger autoscaling with the k6 load test pod:**
 
-> 📖 [Load testing guide](./docs/12-load-testing.md)
+> 📖 [Load testing guide](./docs/09-load-testing.md)
 
 ```bash
 # Create the loadtest ConfigMap (first time only)
@@ -460,7 +460,7 @@ The k6 load test targets these endpoints with randomised traffic:
 
 ## 🛡️ Reliability Features
 
-> 📖 [Pod Disruption Budgets](./docs/06-reliability.md#pdb-—-pod-disruption-budget)
+> 📖 [Pod Disruption Budgets](./docs/07-reliability.md#pdb-—-pod-disruption-budget)
 
 | Feature | Details |
 |---------|---------|
@@ -474,7 +474,7 @@ The k6 load test targets these endpoints with randomised traffic:
 
 ## 🚢 CI/CD Pipeline
 
-> 📖 [CI/CD with GitHub Actions](./docs/11-cicd.md)
+> 📖 [CI/CD with GitHub Actions](./docs/06-cicd.md)
 
 On every push to `main`, GitHub Actions automatically:
 
@@ -566,13 +566,13 @@ npm run test
 | 03 — Configuration: ConfigMaps and Secrets | [docs/03-configuration.md](./docs/03-configuration.md) |
 | 04 — Storage: PV, PVC, and StorageClass | [docs/04-storage.md](./docs/04-storage.md) |
 | 05 — Helm: The Package Manager for Kubernetes | [docs/05-helm.md](./docs/05-helm.md) |
-| 06 — Reliability: HPA, PDB, Resource Limits | [docs/06-reliability.md](./docs/06-reliability.md) |
-| 07 — Observability Architecture: The Three Pillars | [docs/07-observability-arch.md](./docs/07-observability-arch.md) |
-| 08 — Metrics: Prometheus and PromQL | [docs/08-metrics.md](./docs/08-metrics.md) |
-| 09 — Logging: Loki, Promtail, and LogQL | [docs/09-logging.md](./docs/09-logging.md) |
-| 10 — Distributed Tracing: OpenTelemetry and Tempo | [docs/10-tracing.md](./docs/10-tracing.md) |
-| 11 — CI/CD: Automated Deployments | [docs/11-cicd.md](./docs/11-cicd.md) |
-| 12 — Load Testing: Validating Autoscaling | [docs/12-load-testing.md](./docs/12-load-testing.md) |
+| 06 — CI/CD: Automated Deployments | [docs/06-cicd.md](./docs/06-cicd.md) |
+| 07 — Reliability: HPA, PDB, Resource Limits | [docs/07-reliability.md](./docs/07-reliability.md) |
+| 08 — Observability Architecture: The Three Pillars | [docs/08-observability-arch.md](./docs/08-observability-arch.md) |
+| 09 — Load Testing: Validating Autoscaling | [docs/09-load-testing.md](./docs/09-load-testing.md) |
+| 10 — Metrics: Prometheus and PromQL | [docs/10-metrics.md](./docs/10-metrics.md) |
+| 11 — Logging: Loki, Promtail, and LogQL | [docs/11-logging.md](./docs/11-logging.md) |
+| 12 — Distributed Tracing: OpenTelemetry and Tempo | [docs/12-tracing.md](./docs/12-tracing.md) |
 | Raw YAML Examples | [k8s-scripts/](./k8s-scripts/) |
 
 ---
