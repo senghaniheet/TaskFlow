@@ -1,6 +1,6 @@
-# 07 — Observability Architecture: The Three Pillars
+# 08 — Observability Architecture: The Three Pillars
 
-> **Prerequisites:** [06 — Reliability](./06-reliability.md)
+> **Prerequisites:** [07 — Reliability](./07-reliability.md)
 
 ---
 
@@ -179,8 +179,6 @@ Explore tab     → LogQL query  → Loki → log viewer
 Explore tab     → TraceQL      → Tempo → trace tree
 ```
 
-**Auto-provisioning:** Grafana's sidecar container watches for ConfigMaps with label `grafana_datasource: "1"`. The project's [`tempo-datasource.yaml`](../helm/taskflow/templates/tempo-datasource.yaml) ConfigMap is auto-loaded by Grafana — no manual UI clicks needed.
-
 ### 🔔 Alertmanager
 
 Prometheus evaluates alert rules every 15 seconds. When a rule fires (e.g., CPU > 80% for 5 minutes), it sends the alert to Alertmanager, which routes it to the configured receiver (Slack, email, PagerDuty).
@@ -221,11 +219,6 @@ Prometheus evaluates alert rules every 15 seconds. When a rule fires (e.g., CPU 
 
 ## 🔍 In This Project
 
-### Tempo Datasource Auto-Provisioning
-**File:** [`helm/taskflow/templates/tempo-datasource.yaml`](../helm/taskflow/templates/tempo-datasource.yaml)
-
-This ConfigMap is picked up by Grafana's sidecar automatically — no manual UI steps.
-
 ### ServiceMonitor (how Prometheus finds the API)
 **File:** [`helm/taskflow/templates/api-servicemonitor.yaml`](../helm/taskflow/templates/api-servicemonitor.yaml)
 
@@ -246,42 +239,99 @@ ServiceMonitor is a Prometheus Operator **Custom Resource Definition (CRD)**. Th
 
 ---
 
-## 🛠️ Hands-On: Verify All Three Signals
+## 🛠️ Hands-On: Verify All Three Signals Are Working
 
 ```bash
-# ── Metrics: Is Prometheus scraping the API? ─────────────────
+# ── Step 1: Is Prometheus scraping the API? ───────────────────
 
 kubectl port-forward svc/monitoring-kube-prometheus-prometheus -n monitoring 9090:9090
 
 # Open http://localhost:9090/targets
 # Look for: taskflow/taskflow-api-... → UP (green)
+# If missing: check the ServiceMonitor was applied (helm install or kubectl apply)
 
-# ── Logs: Is Promtail shipping logs to Loki? ─────────────────
+# ── Step 2: Is Promtail shipping logs to Loki? ────────────────
 
-kubectl port-forward svc/loki-stack -n monitoring 3100:3100
+kubectl port-forward svc/loki-stack -n monitoring 3100:3100 &
 
 # Test Loki directly
 curl "http://localhost:3100/loki/api/v1/labels"
-# Should return: namespace, pod, container, etc.
+# Should return: {"status":"success","data":["container","namespace","pod", ...]}
 
-# ── Traces: Is the API sending spans to Tempo? ────────────────
+# ── Step 3: Is the API sending spans to Tempo? ────────────────
 
-# Make a request to generate a trace
+# Generate a request to create a trace
 curl http://taskflow.local/api/workspaces
 
-# In Grafana Explore (http://localhost:8080/explore):
-# 1. Select datasource: Tempo
-# 2. Search by service name: taskflow-api
-# 3. You should see spans for the request you just made
-
-# ── Grafana: All Datasources Connected? ──────────────────────
-
-kubectl port-forward svc/monitoring-grafana -n monitoring 8080:80
-# Open http://localhost:8080
-# Go to: Home → Connections → Data Sources
-# All four should show: Connected ✅
+# Verify Tempo received it:
+kubectl logs -n monitoring -l app.kubernetes.io/name=tempo --tail=20
+# Look for: "level=info msg="received a span"
 ```
 
 ---
 
-**Next:** [08 — Metrics: Prometheus and PromQL →](./08-metrics.md)
+## 🖥️ Set Up Grafana
+
+Now that you understand what each component does, it's time to see them all in one place.
+
+### Step 1 — Port-Forward Grafana
+
+```bash
+kubectl port-forward svc/monitoring-grafana -n monitoring 8080:80
+```
+
+Open **http://localhost:8080** in your browser.
+
+- **Username:** `admin`
+- **Password:** `prom-operator`
+
+> **Note:** These are the kube-prometheus-stack defaults. Keep this terminal running throughout the next chapters — all dashboard work is done here.
+
+### Step 2 — Verify All Datasources are Connected
+
+Go to **Home → Connections → Data Sources** and confirm all three datasources show a green **Connected** status:
+
+| Datasource | Type | What it queries |
+|------------|------|----------------|
+| **Prometheus** | prometheus | CPU, memory, request rates, pod counts |
+| **Loki** | loki | Application logs from all containers |
+| **Tempo** | tempo | Distributed traces (request waterfalls) |
+
+If any datasource shows an error:
+```bash
+# Check the backend pods are running
+kubectl get pods -n monitoring
+
+# Common fix: Prometheus is still starting up — wait 60s and retry
+# Loki: kubectl logs -n monitoring -l app=loki --tail=30
+# Tempo: kubectl logs -n monitoring -l app.kubernetes.io/name=tempo --tail=30
+```
+
+### Step 3 — Import the TaskFlow Metrics Dashboard
+
+This project includes a pre-built metrics dashboard. Import it now so it's ready for the load test in the next chapter.
+
+1. In Grafana go to **Dashboards → Import**
+2. Click **Upload dashboard JSON file**
+3. Select **`monitoring/taskflow-dashboard-import.json`** from the project root
+4. On the next screen, set the **Prometheus** datasource and click **Import**
+
+You will now see the **TaskFlow — Application Metrics** dashboard with these panels:
+
+| Panel | PromQL behind it | What to look for |
+|-------|-----------------|-----------------|
+| **Requests / sec (RPS)** | `sum(rate(http_requests_total[2m]))` | Flat line at rest, spikes under load |
+| **API Pod Count** | `kube_deployment_status_replicas_available` | Rises from 3 → up to 10 when HPA fires |
+| **API CPU Utilisation %** | `rate(container_cpu_usage_seconds_total[2m])` | Crosses 60% → triggers HPA |
+| **API Memory Usage (MB)** | `container_memory_usage_bytes / 1024 / 1024` | Watch for memory leaks over time |
+| **HTTP Error Rate** | `rate(http_requests_total{status=~"5.."}[2m])` | Should stay at 0 during normal operation |
+
+> **Leave this dashboard open.** In the next chapter, you will fire the k6 load test and watch every panel react in real time.
+
+---
+
+> **Bridge:** You now understand the architecture and have a live Grafana dashboard. In the next chapter, you will fire a realistic load test and watch the pod count panel climb as HPA auto-scales the application.
+
+---
+
+**Next:** [09 — Load Testing: Validating Autoscaling →](./09-load-testing.md)

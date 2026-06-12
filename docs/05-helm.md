@@ -628,4 +628,4 @@ helm history taskflow --namespace taskflow
 
 ---
 
-**Next:** [06 — Reliability: HPA, PDB, Resource Limits →](./06-reliability.md)
+**Next:** [06 — CI/CD: Automated Deployments →](./06-cicd.md)

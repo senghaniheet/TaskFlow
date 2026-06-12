@@ -1,6 +1,6 @@
-# 11 — CI/CD: Automated Deployments
+# 06 — CI/CD: Automated Deployments
 
-> **Prerequisites:** [10 — Distributed Tracing](./10-tracing.md)
+> **Prerequisites:** [05 — Helm](./05-helm.md)
 
 ---
 
@@ -128,4 +128,4 @@ curl http://taskflow.local/api/health
 
 ---
 
-**Next:** [12 — Load Testing: Validating Autoscaling →](./12-load-testing.md)
+**Next:** [07 — Reliability: HPA, PDB, Resource Limits →](./07-reliability.md)

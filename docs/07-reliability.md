@@ -1,6 +1,6 @@
-# 06 — Reliability: HPA, PDB, Resource Limits, and Probes
+# 07 — Reliability: HPA, PDB, Resource Limits, and Probes
 
-> **Prerequisites:** [05 — Helm](./05-helm.md)
+> **Prerequisites:** [06 — CI/CD](./06-cicd.md)
 
 ---
 
@@ -318,6 +318,8 @@ kubectl delete pod load-test -n taskflow
 - Scale-down is much slower than scale-up (conservative, prevents flapping)
 - `kubectl drain` respects PDB — pods are evicted in controlled batches
 
+> **Bridge:** You have just watched HPA scale as raw kubectl numbers. In the next chapter you will understand the full observability stack and get Grafana running — so you can watch the exact same scaling event as a live, visual dashboard.
+
 ---
 
-**Next:** [07 — Observability Architecture →](./07-observability-arch.md)
+**Next:** [08 — Observability Architecture →](./08-observability-arch.md)
