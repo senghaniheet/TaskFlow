@@ -76,6 +76,7 @@ const Sidebar = () => {
           </svg>
         </div>
         <span className="sidebar-brand-name">TaskFlow</span>
+        <span className="sidebar-version-badge" style={{ fontSize: '10px', backgroundColor: 'var(--color-primary)', color: 'white', padding: '2px 6px', borderRadius: '12px', marginLeft: '8px' }}>v1.0.1</span>
       </div>
 
       {/* Main Nav */}

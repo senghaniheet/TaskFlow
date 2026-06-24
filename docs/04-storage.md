@@ -17,6 +17,9 @@ Image: mongo:7         /data/db/collection.wt      ALL DATA GONE 💀
 
 For a database like MongoDB, this is catastrophic. Every pod restart would wipe the database. Kubernetes solves this with **Persistent Volumes**.
 
+> [!IMPORTANT]
+> **Production Best Practice:** While these storage concepts are critical to understand, running databases like MongoDB inside Kubernetes using Persistent Volumes in production is complex and risky. It is highly recommended to use managed database services (like MongoDB Atlas, AWS DocumentDB) for production environments, leaving your Kubernetes cluster to run stateless applications.
+
 ---
 
 ## The Storage Trilogy

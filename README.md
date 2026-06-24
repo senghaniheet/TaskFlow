@@ -580,3 +580,4 @@ npm run test
 ## 📝 License
 
 MIT License — Free to use and scale!
+  

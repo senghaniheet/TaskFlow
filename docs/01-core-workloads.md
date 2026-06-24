@@ -329,6 +329,9 @@ Answers: **"Is this container still alive?"**
 
 ## StatefulSet — For Stateful Applications (MongoDB)
 
+> [!IMPORTANT]
+> **Production Best Practice:** While this project demonstrates hosting MongoDB in Kubernetes for learning purposes, running stateful databases inside Kubernetes in production is complex. For production environments, it is highly recommended to use managed external services like **MongoDB Atlas**, AWS DocumentDB, or other cloud database providers, and only run stateless workloads (like your Node API and React frontend) inside Kubernetes.
+
 StatefulSets are for applications that need:
 - **Stable identity:** Pod names don't change (`mongo-0`, `mongo-1`)
 - **Ordered deployment:** Start in order (0, 1, 2), stop in reverse (2, 1, 0)
