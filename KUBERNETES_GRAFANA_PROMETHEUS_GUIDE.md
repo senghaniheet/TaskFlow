@@ -29,6 +29,9 @@ The documentation has been structured into a 13-part curriculum. Each chapter co
 12. [11 — Logging: Loki, Promtail, and LogQL](./docs/11-logging.md)
 13. [12 — Distributed Tracing: OpenTelemetry and Tempo](./docs/12-tracing.md)
 
+### Phase 5: Deployment Strategies
+14. [13 — Deployment Strategies: Rolling Update, Blue-Green & Canary](./docs/13-deployment-strategies.md)
+
 ---
 
 ## 🏗️ Project Architecture Overview
@@ -140,3 +143,120 @@ To bridge this gap, the curriculum chapters (such as `01-core-workloads.md`) inc
 Read the raw YAML in `k8s-scripts/` and the explanations in the curriculum first to understand *what* Kubernetes wants, then look at `helm/taskflow/templates/` to understand *how* Helm generates it.
 
 Happy scaling!
+
+---
+
+## 🚢 Deployment Strategies
+
+This project includes three production-grade deployment strategies implemented as dedicated Helm charts. Understanding these strategies is the key to shipping new versions safely.
+
+> **Full learning guide:** [13 — Deployment Strategies: Rolling Update, Blue-Green & Canary](./docs/13-deployment-strategies.md)
+
+---
+
+### 🔄 Rolling Update — The Safe Default
+
+Kubernetes's built-in default. Pods are replaced **one at a time**, gated by the readiness probe. Old pods keep serving traffic until the new pod is healthy. Zero additional infrastructure required.
+
+![Rolling Update Architecture](./assets/Rolling_Update.png)
+
+*V1 pods (orange, slowly scaling down) and V2 pods (green, spinning up) co-exist during the transition. The smart load balancer only routes to pods that pass the readiness probe.*
+
+**Helm chart:** `helm/taskflow/` — every Deployment uses `strategy.type: RollingUpdate` with `maxSurge: 1` and `maxUnavailable: 0`.
+
+```bash
+# Trigger a rolling update
+kubectl rollout restart deployment/taskflow-api -n taskflow
+kubectl rollout status deployment/taskflow-api -n taskflow
+
+# Roll back instantly if something goes wrong
+kubectl rollout undo deployment/taskflow-api -n taskflow
+```
+
+| ✅ Best for | ❌ Avoid when |
+|---|---|
+| Everyday feature releases | Versions are API-incompatible |
+| Simple, low-risk upgrades | You need instant cutover |
+| Resource-constrained clusters | You need A/B traffic splitting |
+
+---
+
+### 🔵🟢 Blue-Green — Instant, Atomic Cutover
+
+Two complete, identical environments run simultaneously. The Service selector points to exactly **one** at a time. Flip it and 100% of traffic moves in an instant — no partial state, no gradual rollout.
+
+![Blue-Green Architecture](./assets/Blue-Green.png)
+
+*Blue (V1) serves 100% of live traffic. Green (V2) is fully deployed and tested in isolation. A single selector change (the toggle on the right) flips all traffic to Green — or back to Blue in an emergency.*
+
+**Helm chart:** `helm/blue-green/` — controlled by the `productionTarget` value in `values.yaml`.
+
+```bash
+# Deploy both colours (green gets no traffic yet)
+helm upgrade --install taskflow ./helm/blue-green -n taskflow
+
+# Test green privately before anyone sees it
+kubectl port-forward deployment/taskflow-web-green 8080:80 -n taskflow
+
+# Instant cutover to green
+helm upgrade taskflow ./helm/blue-green -n taskflow \
+  --set web.productionTarget=green
+
+# Instant rollback to blue
+helm upgrade taskflow ./helm/blue-green -n taskflow \
+  --set web.productionTarget=blue
+```
+
+| ✅ Best for | ❌ Avoid when |
+|---|---|
+| Critical, zero-risk releases | Resources are constrained (needs 2x) |
+| Scheduled maintenance windows | Breaking DB schema changes |
+| When sub-second rollback is required | Long-running idle environments are costly |
+
+---
+
+### 🐤 Canary — Gradual, Data-Driven Promotion
+
+Release to a **small percentage of real users first** (e.g., 10%), monitor error rates and latency in Grafana, and gradually increase the percentage only when metrics are green. Implemented using NGINX Ingress `canary-weight` annotations — no service mesh needed.
+
+![Canary Architecture](./assets/Canary.png)
+
+*The Traffic Splitter routes 90% to the stable V1 Deployment and 10% to the Canary V2 Deployment. The "Canary Metrics: Healthy" panel in the corner represents what you watch in Grafana before promoting further.*
+
+**Helm chart:** `helm/canary/` — controlled by `api.deployments.canary.weight` in `values.yaml`.
+
+```bash
+# Deploy with 10% canary traffic
+helm upgrade --install taskflow ./helm/canary -n taskflow \
+  --set api.deployments.canary.weight=10
+
+# Monitor in Grafana, then promote gradually
+helm upgrade taskflow ./helm/canary -n taskflow \
+  --set api.deployments.canary.weight=30
+helm upgrade taskflow ./helm/canary -n taskflow \
+  --set api.deployments.canary.weight=50
+
+# Emergency rollback — drop canary to zero instantly
+helm upgrade taskflow ./helm/canary -n taskflow \
+  --set api.deployments.canary.weight=0
+```
+
+| ✅ Best for | ❌ Avoid when |
+|---|---|
+| High-stakes, complex changes | API versions are incompatible |
+| A/B testing new features | You lack observability (no Grafana/Prometheus) |
+| Performance-sensitive rollouts | Exact traffic percentages are required |
+
+---
+
+### Strategy Selection Guide
+
+| Scenario | Recommended Strategy |
+|---|---|
+| Daily CI/CD pipeline release | **Rolling Update** |
+| Scheduled "big bang" release with instant rollback | **Blue-Green** |
+| Risky change, want real traffic validation | **Canary** |
+| Both versions incompatible (schema change) | **Blue-Green** + DB migration |
+| A/B test (measure user behaviour) | **Canary** |
+
+For the full deep-dive with hands-on kubectl challenges, see [Chapter 13 — Deployment Strategies](./docs/13-deployment-strategies.md).
