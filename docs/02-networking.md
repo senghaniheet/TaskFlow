@@ -368,6 +368,8 @@ In a bare-metal cluster, `type: LoadBalancer` does nothing — no cloud controll
 > [!TIP]
 > The key insight is that your **Ingress rules YAML never changes** between environments. Only the infrastructure layer that delivers traffic to the Ingress Controller differs. This is why Ingress is such a powerful abstraction — write your routing rules once, deploy anywhere.
 
+![Cloud vs Bare-Metal Ingress Architecture](../assets/CloudvsBare-MetalIngressArchitecture.png)
+
 ### Default Backend: Handling Unmatched Requests
 
 Every Ingress Controller includes a **default backend** — a fallback handler for requests that don't match any Ingress rule. Without it, unmatched requests receive a raw system-level error.

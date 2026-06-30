@@ -153,6 +153,8 @@ Understanding the exact sequence of events from `kubectl apply` to a running pod
 > [!NOTE]
 > **Why "API Server as gatekeeper"?** Every single piece of communication — from `kubectl`, from the Scheduler, from the Kubelet, from the Controller Manager — goes *through* the API Server. No component talks to etcd directly. No component talks to another component directly. The API Server is the single, enforced choke point for authentication, authorization, and validation.
 
+![Control Plane Request Flow](../assets/ControlPlaneRequestFlow.png)
+
 ---
 
 ## Namespaces — Virtual Clusters

@@ -205,6 +205,8 @@ helm upgrade --install taskflow-staging ./helm/taskflow \
   --values helm/taskflow/values-staging.yaml   # Applied last, wins on conflicts
 ```
 
+![Helm Templating for Staging and Production](../assets/Helmtemplatingforstagingandproduction.png)
+
 ### CI/CD Injection: Zero-Touch Deployments
 
 In a CI/CD pipeline (GitHub Actions, Jenkins, GitLab CI), the image tag changes on every commit. Helm's `--set` flag lets the pipeline inject dynamic values at deploy time without modifying any YAML files:

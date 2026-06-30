@@ -450,6 +450,8 @@ If `mongo-1` dies and a replacement pod comes up, it needs to:
 
 If any of these three things are random or interchangeable, the replica set breaks and data becomes inconsistent.
 
+![StatefulSet Master/Slave Sync](../assets/StatefulSetMasterSlaveSync.png)
+
 ### Sticky Identity + Persistent Volumes: The Complete Picture
 
 The StatefulSet solves all three requirements together:
