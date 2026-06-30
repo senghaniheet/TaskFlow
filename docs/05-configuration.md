@@ -53,7 +53,7 @@ volumes:
 # Creates /app/config/NODE_ENV, /app/config/PORT as files
 ```
 
-### Raw YAML ([k8s-scripts/07-configmap.yaml](../k8s-scripts/07-configmap.yaml))
+### Raw YAML ([k8s-scripts/configmap.yaml](../k8s-scripts/configmap.yaml))
 
 ```yaml
 apiVersion: v1
@@ -79,7 +79,7 @@ data:
 
 ```bash
 # Apply the ConfigMap
-kubectl apply -f k8s-scripts/07-configmap.yaml
+kubectl apply -f k8s-scripts/configmap.yaml
 
 # View the ConfigMap data
 kubectl get configmap taskflow-api-config -n taskflow
@@ -132,7 +132,7 @@ echo "bXktand0LXNlY3JldA==" | base64 -d
 | Better | Sealed Secrets | Asymmetric encryption. Safe to commit to Git |
 | Best | Vault / Cloud | HashiCorp Vault or AWS/GCP Secrets Manager. Injected at runtime |
 
-### Raw YAML ([k8s-scripts/08-secret.yaml](../k8s-scripts/08-secret.yaml))
+### Raw YAML ([k8s-scripts/secret.yaml](../k8s-scripts/secret.yaml))
 
 ```yaml
 # base64 is encoding, not encryption — anyone with kubectl access can decode these
@@ -153,7 +153,7 @@ stringData:                   # Write plaintext here; K8s encodes it on save
 
 ```bash
 # Apply the Secret
-kubectl apply -f k8s-scripts/08-secret.yaml
+kubectl apply -f k8s-scripts/secret.yaml
 
 # View the Secret — values appear base64 encoded
 kubectl get secret taskflow-api-secret -n taskflow -o yaml
@@ -181,7 +181,7 @@ kubectl exec -it <api-pod-name> -n taskflow -- env | grep -E "JWT_SECRET|MONGO_U
 
 Kubernetes does **not** automatically restart pods when a ConfigMap or Secret changes. New pods created after the change will get the new config. Existing pods won't.
 
-The `02-deployment.yaml` has these annotations:
+The `deployment.yaml` has these annotations:
 
 ```yaml
 annotations:
@@ -202,8 +202,8 @@ In Chapter 05, Helm automates this checksum calculation automatically.
 ```bash
 # ── Part 1: Apply ConfigMap and Secret ──────────────────────
 
-kubectl apply -f k8s-scripts/07-configmap.yaml
-kubectl apply -f k8s-scripts/08-secret.yaml
+kubectl apply -f k8s-scripts/configmap.yaml
+kubectl apply -f k8s-scripts/secret.yaml
 
 # ── Part 2: Verify values inside the pod ─────────────────────
 
@@ -224,14 +224,14 @@ kubectl exec -it <new-api-pod-name> -n taskflow -- env | grep LOG_LEVEL
 # → LOG_LEVEL=debug
 
 # ── Part 4: Count what you've applied so far ─────────────────
-# kubectl apply -f k8s-scripts/00-namespace.yaml    ← chapter 01
-# kubectl apply -f k8s-scripts/07-configmap.yaml    ← this chapter
-# kubectl apply -f k8s-scripts/08-secret.yaml       ← this chapter
-# kubectl apply -f k8s-scripts/09-pvc.yaml          ← chapter 01
-# kubectl apply -f k8s-scripts/02-deployment.yaml   ← chapter 01
-# kubectl apply -f k8s-scripts/03-statefulset.yaml  ← chapter 01
-# kubectl apply -f k8s-scripts/04-service-clusterip.yaml ← chapter 02
-# kubectl apply -f k8s-scripts/06-ingress.yaml      ← chapter 02
+# kubectl apply -f k8s-scripts/namespace.yaml    ← chapter 01
+# kubectl apply -f k8s-scripts/configmap.yaml    ← this chapter
+# kubectl apply -f k8s-scripts/secret.yaml       ← this chapter
+# kubectl apply -f k8s-scripts/pvc.yaml          ← chapter 01
+# kubectl apply -f k8s-scripts/deployment.yaml   ← chapter 01
+# kubectl apply -f k8s-scripts/statefulset.yaml  ← chapter 01
+# kubectl apply -f k8s-scripts/service-clusterip.yaml ← chapter 02
+# kubectl apply -f k8s-scripts/ingress.yaml      ← chapter 02
 # That's 8 files. And we still have HPA and PDB to go.
 # Chapter 05 replaces all of this with: helm install taskflow ./helm/taskflow
 ```

@@ -75,7 +75,7 @@ Headless Service:  mongo-0.mongo.taskflow.svc → 10.244.0.5 (specific pod!)
 
 StatefulSets need headless services so each pod gets a stable, individually addressable DNS name.
 
-### Raw YAML ([k8s-scripts/04-service-clusterip.yaml](../k8s-scripts/04-service-clusterip.yaml))
+### Raw YAML ([k8s-scripts/service-clusterip.yaml](../k8s-scripts/service-clusterip.yaml))
 
 ```yaml
 # ── API Service ──────────────────────────────────────────────
@@ -116,7 +116,7 @@ spec:
 kubectl get pods -n taskflow
 
 # Apply both Services (the file contains two objects separated by ---)
-kubectl apply -f k8s-scripts/04-service-clusterip.yaml
+kubectl apply -f k8s-scripts/service-clusterip.yaml
 
 # See the Services
 kubectl get svc -n taskflow
@@ -162,7 +162,7 @@ minikube ip           # → 192.168.49.2
 curl http://192.168.49.2:30500/api/health
 ```
 
-### Raw YAML ([k8s-scripts/05-service-nodeport.yaml](../k8s-scripts/05-service-nodeport.yaml))
+### Raw YAML ([k8s-scripts/service-nodeport.yaml](../k8s-scripts/service-nodeport.yaml))
 
 ```yaml
 # for development/testing only; use Ingress in production
@@ -184,7 +184,7 @@ spec:
 ### → Try It: Access the API via NodePort
 
 ```bash
-kubectl apply -f k8s-scripts/05-service-nodeport.yaml
+kubectl apply -f k8s-scripts/service-nodeport.yaml
 
 # Get the Minikube node IP
 minikube ip
@@ -197,7 +197,7 @@ kubectl get svc api-nodeport -n taskflow
 # TYPE: NodePort, PORT(S): 5000:30500/TCP
 
 # Clean up — we'll use Ingress for real traffic
-kubectl delete -f k8s-scripts/05-service-nodeport.yaml
+kubectl delete -f k8s-scripts/service-nodeport.yaml
 ```
 
 ---
@@ -223,7 +223,7 @@ An Ingress **object** (YAML) is just configuration. You also need an **Ingress C
 minikube addons enable ingress
 ```
 
-### Raw YAML ([k8s-scripts/06-ingress.yaml](../k8s-scripts/06-ingress.yaml))
+### Raw YAML ([k8s-scripts/ingress.yaml](../k8s-scripts/ingress.yaml))
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -270,7 +270,7 @@ kubectl get pods -n ingress-nginx -w
 # Wait until: ingress-nginx-controller-xxx  Running
 
 # Apply the Ingress rules
-kubectl apply -f k8s-scripts/06-ingress.yaml
+kubectl apply -f k8s-scripts/ingress.yaml
 
 # Add the hostname to your hosts file (run as Administrator on Windows)
 # Open: C:\Windows\System32\drivers\etc\hosts
@@ -443,14 +443,14 @@ StatefulSet Pod: taskflow-mongo-0
 
 ```bash
 # ── Step 1: Apply everything in order ───────────────────────
-kubectl apply -f k8s-scripts/00-namespace.yaml
-kubectl apply -f k8s-scripts/07-configmap.yaml
-kubectl apply -f k8s-scripts/08-secret.yaml
-kubectl apply -f k8s-scripts/09-pvc.yaml
-kubectl apply -f k8s-scripts/03-statefulset.yaml
-kubectl apply -f k8s-scripts/02-deployment.yaml
-kubectl apply -f k8s-scripts/04-service-clusterip.yaml
-kubectl apply -f k8s-scripts/06-ingress.yaml
+kubectl apply -f k8s-scripts/namespace.yaml
+kubectl apply -f k8s-scripts/configmap.yaml
+kubectl apply -f k8s-scripts/secret.yaml
+kubectl apply -f k8s-scripts/pvc.yaml
+kubectl apply -f k8s-scripts/statefulset.yaml
+kubectl apply -f k8s-scripts/deployment.yaml
+kubectl apply -f k8s-scripts/service-clusterip.yaml
+kubectl apply -f k8s-scripts/ingress.yaml
 
 # Notice: 8 separate commands just to get to a working app.
 # This is the exact problem we solve in Chapter 05 with Helm.

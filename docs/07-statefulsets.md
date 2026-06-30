@@ -25,7 +25,7 @@ StatefulSets are for applications that need:
 
 ---
 
-## Raw YAML ([k8s-scripts/03-statefulset.yaml](../k8s-scripts/03-statefulset.yaml))
+## Raw YAML ([k8s-scripts/statefulset.yaml](../k8s-scripts/statefulset.yaml))
 
 ```yaml
 apiVersion: apps/v1
@@ -74,10 +74,10 @@ spec:
 
 ```bash
 # Apply the PVC first (StatefulSet needs storage before it can start)
-kubectl apply -f k8s-scripts/09-pvc.yaml
+kubectl apply -f k8s-scripts/pvc.yaml
 
 # Create the StatefulSet
-kubectl apply -f k8s-scripts/03-statefulset.yaml
+kubectl apply -f k8s-scripts/statefulset.yaml
 
 # Notice: pods have ORDINAL names, not random hashes
 kubectl get pods -n taskflow | grep mongo

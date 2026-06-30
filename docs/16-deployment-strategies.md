@@ -1,6 +1,6 @@
 ﻿# 16 — Deployment Strategies: Rolling Update, Blue-Green & Canary
 
-> **Prerequisites:** [Previous Chapter](./15-tracing.md) | [06 — CI/CD](./06-cicd.md) | [07 — Reliability](./07-reliability.md)
+> **Prerequisites:** [Previous Chapter](./15-tracing.md) | [06 — CI/CD](./09-cicd.md) | [07 — Reliability](./10-reliability.md)
 
 ---
 
@@ -622,4 +622,4 @@ helm upgrade taskflow ./helm/canary -n taskflow \
 
 ---
 
-**Next:** [Next Chapter](./KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md) *(or revisit any chapter in the curriculum)*
+**Next:** [Next Chapter](../KUBERNETES_GRAFANA_PROMETHEUS_GUIDE.md) *(or revisit any chapter in the curriculum)*

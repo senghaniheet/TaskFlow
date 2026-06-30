@@ -80,7 +80,7 @@ Minikube provides a default StorageClass called `standard` that creates `hostPat
 
 **Why MongoDB uses RWO:** MongoDB's WiredTiger storage engine uses file-level locking. Two MongoDB processes writing to the same `/data/db` directory simultaneously would corrupt the data. RWO ensures only one node writes at a time.
 
-### Raw YAML ([k8s-scripts/09-pvc.yaml](../k8s-scripts/09-pvc.yaml))
+### Raw YAML ([k8s-scripts/pvc.yaml](../k8s-scripts/pvc.yaml))
 
 ```yaml
 apiVersion: v1
@@ -105,14 +105,14 @@ spec:
 
 ```bash
 # Apply the PVC
-kubectl apply -f k8s-scripts/09-pvc.yaml
+kubectl apply -f k8s-scripts/pvc.yaml
 
 # Check its status immediately
 kubectl get pvc -n taskflow
 # STATUS: Pending   ← waiting for a Pod to mount it (Minikube behavior)
 
 # Apply the StatefulSet (this triggers the PV to be created and bound)
-kubectl apply -f k8s-scripts/03-statefulset.yaml
+kubectl apply -f k8s-scripts/statefulset.yaml
 
 # Check PVC status again
 kubectl get pvc -n taskflow

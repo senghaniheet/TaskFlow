@@ -9,16 +9,16 @@
 Over the last four chapters, you applied these files one by one:
 
 ```bash
-kubectl apply -f k8s-scripts/00-namespace.yaml
-kubectl apply -f k8s-scripts/07-configmap.yaml
-kubectl apply -f k8s-scripts/08-secret.yaml
-kubectl apply -f k8s-scripts/09-pvc.yaml
-kubectl apply -f k8s-scripts/03-statefulset.yaml
-kubectl apply -f k8s-scripts/02-deployment.yaml
-kubectl apply -f k8s-scripts/04-service-clusterip.yaml
-kubectl apply -f k8s-scripts/06-ingress.yaml
-kubectl apply -f k8s-scripts/10-hpa.yaml
-kubectl apply -f k8s-scripts/11-pdb.yaml
+kubectl apply -f k8s-scripts/namespace.yaml
+kubectl apply -f k8s-scripts/configmap.yaml
+kubectl apply -f k8s-scripts/secret.yaml
+kubectl apply -f k8s-scripts/pvc.yaml
+kubectl apply -f k8s-scripts/statefulset.yaml
+kubectl apply -f k8s-scripts/deployment.yaml
+kubectl apply -f k8s-scripts/service-clusterip.yaml
+kubectl apply -f k8s-scripts/ingress.yaml
+kubectl apply -f k8s-scripts/hpa.yaml
+kubectl apply -f k8s-scripts/pdb.yaml
 ```
 
 **10 files. In a specific dependency order. With hardcoded values.**
@@ -271,7 +271,7 @@ The following three examples walk through the **exact same files** from `k8s-scr
 
 **What you learn:** Basic value substitution with `{{ .Values.* }}` and shared helper functions.
 
-#### Before: Raw YAML ([k8s-scripts/04-service-clusterip.yaml](../k8s-scripts/04-service-clusterip.yaml))
+#### Before: Raw YAML ([k8s-scripts/service-clusterip.yaml](../k8s-scripts/service-clusterip.yaml))
 
 ```yaml
 apiVersion: v1
@@ -359,7 +359,7 @@ These helper functions are defined **once** in `_helpers.tpl` and used in all 18
 
 **What you learn:** Multi-field substitution, conditional replicas (when HPA is active), `toYaml` for nested blocks, and the automatic checksum annotation.
 
-#### Before: Raw YAML ([k8s-scripts/02-deployment.yaml](../k8s-scripts/02-deployment.yaml))
+#### Before: Raw YAML ([k8s-scripts/deployment.yaml](../k8s-scripts/deployment.yaml))
 
 ```yaml
 apiVersion: apps/v1
@@ -491,7 +491,7 @@ spec:
 
 **What you learn:** Using `{{- if }}` to conditionally create an entire K8s resource. This is Helm's most powerful pattern — a feature flag that determines whether a resource exists at all.
 
-#### Before: Raw YAML ([k8s-scripts/10-hpa.yaml](../k8s-scripts/10-hpa.yaml))
+#### Before: Raw YAML ([k8s-scripts/hpa.yaml](../k8s-scripts/hpa.yaml))
 
 ```yaml
 apiVersion: autoscaling/v2
@@ -524,7 +524,7 @@ spec:
 **The problem with this raw YAML:**
 - HPA requires `metrics-server` to be installed. In a minimal dev environment, it may not be.
 - `minReplicas: 3` and `maxReplicas: 10` are hardcoded — staging needs different values.
-- You can't "disable" HPA without deleting the file. `kubectl delete -f 10-hpa.yaml` is destructive.
+- You can't "disable" HPA without deleting the file. `kubectl delete -f hpa.yaml` is destructive.
 
 #### values.yaml section
 

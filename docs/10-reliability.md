@@ -96,7 +96,7 @@ Even at zero traffic, this project runs 3 API replicas because:
 2. **PDB compatibility:** PDB allows `maxUnavailable: 1`, so 3 gives a safe floor
 3. **Cold start avoidance:** Requests don't wait for pods to warm up when traffic resumes
 
-### Raw YAML ([k8s-scripts/10-hpa.yaml](../k8s-scripts/10-hpa.yaml))
+### Raw YAML ([k8s-scripts/hpa.yaml](../k8s-scripts/hpa.yaml))
 
 ```yaml
 # Requires metrics-server addon: minikube addons enable metrics-server
@@ -141,7 +141,7 @@ minikube addons enable metrics-server
 kubectl get pods -n kube-system | grep metrics-server
 
 # Apply the HPA
-kubectl apply -f k8s-scripts/10-hpa.yaml
+kubectl apply -f k8s-scripts/hpa.yaml
 
 # Check HPA status
 kubectl get hpa -n taskflow
@@ -200,7 +200,7 @@ Without PDB: Both pods evicted simultaneously → potential downtime
 With PDB:    One at a time → always at least 2 pods serving
 ```
 
-### Raw YAML ([k8s-scripts/11-pdb.yaml](../k8s-scripts/11-pdb.yaml))
+### Raw YAML ([k8s-scripts/pdb.yaml](../k8s-scripts/pdb.yaml))
 
 ```yaml
 # Applies during voluntary disruptions only (node drain, upgrades).
@@ -223,7 +223,7 @@ spec:
 
 ```bash
 # Apply the PDB
-kubectl apply -f k8s-scripts/11-pdb.yaml
+kubectl apply -f k8s-scripts/pdb.yaml
 
 # Inspect it
 kubectl get pdb -n taskflow
@@ -286,16 +286,16 @@ kubectl describe pod <api-pod-name> -n taskflow | grep -A 10 "Limits\|Requests"
 # ── Part 2: Full Stack Applied with Raw YAML ──────────────────
 
 # At this point you've applied:
-# kubectl apply -f k8s-scripts/00-namespace.yaml
-# kubectl apply -f k8s-scripts/07-configmap.yaml
-# kubectl apply -f k8s-scripts/08-secret.yaml
-# kubectl apply -f k8s-scripts/09-pvc.yaml
-# kubectl apply -f k8s-scripts/02-deployment.yaml
-# kubectl apply -f k8s-scripts/03-statefulset.yaml
-# kubectl apply -f k8s-scripts/04-service-clusterip.yaml
-# kubectl apply -f k8s-scripts/06-ingress.yaml
-# kubectl apply -f k8s-scripts/10-hpa.yaml
-# kubectl apply -f k8s-scripts/11-pdb.yaml
+# kubectl apply -f k8s-scripts/namespace.yaml
+# kubectl apply -f k8s-scripts/configmap.yaml
+# kubectl apply -f k8s-scripts/secret.yaml
+# kubectl apply -f k8s-scripts/pvc.yaml
+# kubectl apply -f k8s-scripts/deployment.yaml
+# kubectl apply -f k8s-scripts/statefulset.yaml
+# kubectl apply -f k8s-scripts/service-clusterip.yaml
+# kubectl apply -f k8s-scripts/ingress.yaml
+# kubectl apply -f k8s-scripts/hpa.yaml
+# kubectl apply -f k8s-scripts/pdb.yaml
 # That's 10 separate files, applied in a specific dependency order.
 # What if you forget one? What if order changes? What about staging?
 # Chapter 05 — Helm — solved all of this.

@@ -22,7 +22,7 @@ Same physical cluster:
 
 ## Creating a Namespace
 
-**Raw YAML** ([k8s-scripts/00-namespace.yaml](../k8s-scripts/00-namespace.yaml)):
+**Raw YAML** ([k8s-scripts/namespace.yaml](../k8s-scripts/namespace.yaml)):
 ```yaml
 apiVersion: v1
 kind: Namespace
@@ -35,7 +35,7 @@ metadata:
 ```
 
 ```bash
-kubectl apply -f k8s-scripts/00-namespace.yaml
+kubectl apply -f k8s-scripts/namespace.yaml
 kubectl get namespaces                      # List all namespaces in the cluster
 kubectl get all -n taskflow                 # View everything inside the namespace
 ```
@@ -95,7 +95,7 @@ Once Green is verified, the Ingress rules are updated to route all traffic to Gr
 Without limits, one misbehaving team or a runaway HPA can consume all cluster CPU/RAM, starving every other workload. A **ResourceQuota** enforces hard caps per namespace:
 
 ```yaml
-# k8s-scripts/00-resource-quota.yaml
+# k8s-scripts/namespace.yaml
 apiVersion: v1
 kind: ResourceQuota
 metadata:
@@ -116,7 +116,7 @@ spec:
 ```
 
 ```bash
-kubectl apply -f k8s-scripts/00-resource-quota.yaml
+kubectl apply -f k8s-scripts/namespace.yaml
 kubectl describe resourcequota taskflow-quota -n taskflow
 # Output shows: Used vs Hard limits — instantly see how much headroom remains
 ```
@@ -179,7 +179,7 @@ nslookup monitoring-grafana.monitoring.svc.cluster.local
 exit
 
 # ── Step 5: Apply and inspect a ResourceQuota ────────────────
-kubectl apply -f k8s-scripts/00-resource-quota.yaml
+kubectl apply -f k8s-scripts/resource-quota.yaml
 kubectl describe resourcequota taskflow-quota -n taskflow
 # Look at the "Used" vs "Hard" columns — see how much your current deployment uses
 ```

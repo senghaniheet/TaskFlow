@@ -167,7 +167,7 @@ Happy scaling!
 
 This project includes three production-grade deployment strategies implemented as dedicated Helm charts. Understanding these strategies is the key to shipping new versions safely.
 
-> **Full learning guide:** [13 — Deployment Strategies: Rolling Update, Blue-Green & Canary](./docs/13-deployment-strategies.md)
+> **Full learning guide:** [13 — Deployment Strategies: Rolling Update, Blue-Green & Canary](./docs/16-deployment-strategies.md)
 
 ---
 
@@ -276,4 +276,4 @@ helm upgrade taskflow ./helm/canary -n taskflow \
 | Both versions incompatible (schema change) | **Blue-Green** + DB migration |
 | A/B test (measure user behaviour) | **Canary** |
 
-For the full deep-dive with hands-on kubectl challenges, see [Chapter 13 — Deployment Strategies](./docs/13-deployment-strategies.md).
+For the full deep-dive with hands-on kubectl challenges, see [Chapter 13 — Deployment Strategies](./docs/16-deployment-strategies.md).

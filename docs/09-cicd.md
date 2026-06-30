@@ -16,7 +16,7 @@ A CI/CD pipeline automates this. In this project, we use **GitHub Actions**.
 2. **Build:** The pipeline checks out the code and runs `docker build`.
 3. **Push:** The pipeline pushes the built image to a Container Registry (e.g., GitHub Container Registry, Docker Hub, AWS ECR).
 4. **Deploy:** The pipeline tells Kubernetes to update the Deployment with the new image.
-5. **Rollout:** Kubernetes performs a rolling update (as learned in [01 - Core Workloads](./01-core-workloads.md)), ensuring zero downtime.
+5. **Rollout:** Kubernetes performs a rolling update (as learned in [01 - Core Workloads](./03-stateless-workloads.md)), ensuring zero downtime.
 
 ### Image Tagging Strategy
 
