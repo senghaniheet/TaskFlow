@@ -4,33 +4,36 @@ Welcome to the TaskFlow Kubernetes and Observability curriculum! This project se
 
 ## 📚 The Curriculum
 
-The documentation has been structured into a 13-part curriculum. Each chapter contains theoretical explanations, references to the exact code in this project, and hands-on KubeCtl/Grafana challenges.
+The documentation has been structured into a 17-part curriculum. Each chapter contains theoretical explanations, references to the exact code in this project, and hands-on KubeCtl/Grafana challenges.
 
 *We recommend reading them in order:*
 
 ### Phase 1: Core Kubernetes
 1. [00 — Introduction: Docker → Kubernetes](./docs/00-introduction.md)
-2. [01 — Core Workloads: Pods, Deployments, StatefulSets](./docs/01-core-workloads.md)
-3. [02 — Networking: Services, Ingress, and DNS](./docs/02-networking.md)
-4. [03 — Configuration: ConfigMaps and Secrets](./docs/03-configuration.md)
-5. [04 — Storage: PV, PVC, and StorageClass](./docs/04-storage.md)
+2. [01 — Setup & kubectl: Minikube and the CLI](./docs/01-setup-kubectl.md)
+3. [02 — Namespaces: Virtual Clusters & Resource Governance](./docs/02-namespaces.md)
+4. [03 — Stateless Workloads: Pods & Deployments](./docs/03-stateless-workloads.md)
+5. [04 — Networking: Services, Ingress, and DNS](./docs/04-networking.md)
+6. [05 — Configuration: ConfigMaps and Secrets](./docs/05-configuration.md)
+7. [06 — Storage: PV, PVC, and StorageClass](./docs/06-storage.md)
+8. [07 — StatefulSets: Stateful Applications & Databases](./docs/07-statefulsets.md)
 
 ### Phase 2: Helm & CI/CD
-6. [05 — Helm: The Package Manager for Kubernetes](./docs/05-helm.md)
-7. [06 — CI/CD: Automated Deployments](./docs/06-cicd.md)
+9. [08 — Helm: The Package Manager for Kubernetes](./docs/08-helm.md)
+10. [09 — CI/CD: Automated Deployments](./docs/09-cicd.md)
 
 ### Phase 3: Reliability & Observability Architecture
-8. [07 — Reliability: HPA, PDB, Resource Limits](./docs/07-reliability.md)
-9. [08 — Observability Architecture: The Three Pillars](./docs/08-observability-arch.md)
+11. [10 — Reliability: HPA, PDB, Resource Limits](./docs/10-reliability.md)
+12. [11 — Observability Architecture: The Three Pillars](./docs/11-observability-arch.md)
 
 ### Phase 4: Load Testing & Telemetry
-10. [09 — Load Testing: Validating Autoscaling](./docs/09-load-testing.md)
-11. [10 — Metrics: Prometheus and PromQL](./docs/10-metrics.md)
-12. [11 — Logging: Loki, Promtail, and LogQL](./docs/11-logging.md)
-13. [12 — Distributed Tracing: OpenTelemetry and Tempo](./docs/12-tracing.md)
+13. [12 — Load Testing: Validating Autoscaling](./docs/12-load-testing.md)
+14. [13 — Metrics: Prometheus and PromQL](./docs/13-metrics.md)
+15. [14 — Logging: Loki, Promtail, and LogQL](./docs/14-logging.md)
+16. [15 — Distributed Tracing: OpenTelemetry and Tempo](./docs/15-tracing.md)
 
 ### Phase 5: Deployment Strategies
-14. [13 — Deployment Strategies: Rolling Update, Blue-Green & Canary](./docs/13-deployment-strategies.md)
+17. [16 — Deployment Strategies: Rolling Update, Blue-Green & Canary](./docs/16-deployment-strategies.md)
 
 ---
 
@@ -41,10 +44,10 @@ The following deep-dive sections are embedded within their respective chapters f
 | Topic | Where to Find It |
 |-------|-----------------|
 | How the Control Plane orchestrates a workload (API Server → etcd → Scheduler → Kubelet → kube-proxy, step-by-step) | [00 — Introduction §Control Plane Orchestration](./docs/00-introduction.md) |
-| Advanced Namespace strategies: env-per-namespace, team-per-namespace, ResourceQuota, kubens | [00 — Introduction §Advanced Namespace Strategies](./docs/00-introduction.md) |
-| StatefulSet deep dive: sticky identities, PV reattachment, Headless Service DNS, production database guidance | [01 — Core Workloads §Why StatefulSets Are Fundamentally Different](./docs/01-core-workloads.md) |
-| Cloud vs Bare-Metal Ingress architecture, Default Backend configuration | [02 — Networking §Cloud vs. Bare-Metal](./docs/02-networking.md) |
-| Helm as a Templating Engine: DRY pattern, environment promotion, CI/CD injection, Helm Registries | [05 — Helm §Helm as a Templating Engine](./docs/05-helm.md) |
+| Advanced Namespace strategies: env-per-namespace, team-per-namespace, ResourceQuota, kubens | [02 — Namespaces §Advanced Namespace Strategies](./docs/02-namespaces.md) |
+| StatefulSet deep dive: sticky identities, PV reattachment, Headless Service DNS, production database guidance | [07 — StatefulSets §Why StatefulSets Are Fundamentally Different](./docs/07-statefulsets.md) |
+| Cloud vs Bare-Metal Ingress architecture, Default Backend configuration | [04 — Networking §Cloud vs. Bare-Metal](./docs/04-networking.md) |
+| Helm as a Templating Engine: DRY pattern, environment promotion, CI/CD injection, Helm Registries | [08 — Helm §Helm as a Templating Engine](./docs/08-helm.md) |
 
 ---
 
@@ -56,7 +59,7 @@ This project runs the TaskFlow API (Node.js/Express) and Web UI (React) backed b
 
 ![Observability Architecture](./assets/observability-architecture.png)
 
-*For a deep dive into how every component above communicates, see [08 — Observability Architecture](./docs/08-observability-arch.md).*
+*For a deep dive into how every component above communicates, see [11 — Observability Architecture](./docs/11-observability-arch.md).*
 
 ---
 

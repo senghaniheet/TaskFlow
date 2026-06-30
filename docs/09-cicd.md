@@ -1,6 +1,6 @@
-# 06 — CI/CD: Automated Deployments
+# 09 — CI/CD: Automated Deployments
 
-> **Prerequisites:** [05 — Helm](./05-helm.md)
+> **Prerequisites:** [Previous Chapter](./08-helm.md)
 
 ---
 
@@ -128,4 +128,4 @@ curl http://taskflow.local/api/health
 
 ---
 
-**Next:** [07 — Reliability: HPA, PDB, Resource Limits →](./07-reliability.md)
+**Next:** [Next Chapter](./10-reliability.md)

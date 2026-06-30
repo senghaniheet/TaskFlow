@@ -1,6 +1,6 @@
-# 08 — Observability Architecture: The Three Pillars
+# 11 — Observability Architecture: The Three Pillars
 
-> **Prerequisites:** [07 — Reliability](./07-reliability.md)
+> **Prerequisites:** [Previous Chapter](./10-reliability.md)
 
 ---
 
@@ -334,4 +334,4 @@ You will now see the **TaskFlow — Application Metrics** dashboard with these p
 
 ---
 
-**Next:** [09 — Load Testing: Validating Autoscaling →](./09-load-testing.md)
+**Next:** [Next Chapter](./12-load-testing.md)

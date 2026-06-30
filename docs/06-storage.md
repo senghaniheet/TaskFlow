@@ -1,6 +1,6 @@
-# 04 — Storage: PV, PVC, and StorageClass
+# 06 — Storage: PV, PVC, and StorageClass
 
-> **Prerequisites:** [03 — Configuration](./03-configuration.md)
+> **Prerequisites:** [Previous Chapter](./05-configuration.md)
 
 ---
 
@@ -240,4 +240,4 @@ ls /tmp/hostpath-provisioner/  # ← Minikube stores PV data here
 
 ---
 
-**Next:** [05 — Helm: The Package Manager for Kubernetes →](./05-helm.md)
+**Next:** [Next Chapter](./07-statefulsets.md)

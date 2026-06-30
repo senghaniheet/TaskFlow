@@ -1,6 +1,6 @@
-# 12 — Distributed Tracing: OpenTelemetry and Tempo
+# 15 — Distributed Tracing: OpenTelemetry and Tempo
 
-> **Prerequisites:** [11 — Logging](./11-logging.md)
+> **Prerequisites:** [Previous Chapter](./14-logging.md)
 
 ---
 

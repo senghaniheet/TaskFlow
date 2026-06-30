@@ -1,6 +1,6 @@
-# 03 — Configuration: ConfigMaps and Secrets
+# 05 — Configuration: ConfigMaps and Secrets
 
-> **Prerequisites:** [02 — Networking](./02-networking.md)
+> **Prerequisites:** [Previous Chapter](./04-networking.md)
 
 ---
 
@@ -243,4 +243,4 @@ kubectl exec -it <new-api-pod-name> -n taskflow -- env | grep LOG_LEVEL
 
 ---
 
-**Next:** [04 — Storage: PV, PVC, and StorageClass →](./04-storage.md)
+**Next:** [Next Chapter](./06-storage.md)

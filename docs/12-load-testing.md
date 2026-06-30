@@ -1,6 +1,6 @@
-# 09 — Load Testing: Validating Autoscaling
+# 12 — Load Testing: Validating Autoscaling
 
-> **Prerequisites:** [08 — Observability Architecture](./08-observability-arch.md)
+> **Prerequisites:** [Previous Chapter](./11-observability-arch.md)
 
 ---
 
@@ -256,4 +256,4 @@ kubectl delete configmap loadtest-config -n taskflow
 
 ---
 
-**Next:** [10 — Metrics: Prometheus and PromQL →](./10-metrics.md)
+**Next:** [Next Chapter](./13-metrics.md)

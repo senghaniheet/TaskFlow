@@ -1,6 +1,6 @@
-# 07 — Reliability: HPA, PDB, Resource Limits, and Probes
+# 10 — Reliability: HPA, PDB, Resource Limits, and Probes
 
-> **Prerequisites:** [06 — CI/CD](./06-cicd.md)
+> **Prerequisites:** [Previous Chapter](./09-cicd.md)
 
 ---
 
@@ -322,4 +322,4 @@ kubectl delete pod load-test -n taskflow
 
 ---
 
-**Next:** [08 — Observability Architecture →](./08-observability-arch.md)
+**Next:** [Next Chapter](./11-observability-arch.md)

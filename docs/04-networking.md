@@ -1,6 +1,6 @@
-# 02 — Networking: Services, Ingress, and DNS
+# 04 — Networking: Services, Ingress, and DNS
 
-> **Prerequisites:** [01 — Core Workloads](./01-core-workloads.md)
+> **Prerequisites:** [Previous Chapter](./03-stateless-workloads.md)
 
 ---
 
@@ -479,4 +479,4 @@ kubectl logs -l app=api -n taskflow -f --max-log-requests=10
 
 ---
 
-**Next:** [03 — Configuration: ConfigMaps and Secrets →](./03-configuration.md)
+**Next:** [Next Chapter](./05-configuration.md)

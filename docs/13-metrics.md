@@ -1,6 +1,6 @@
-# 10 — Metrics: Prometheus and PromQL
+# 13 — Metrics: Prometheus and PromQL
 
-> **Prerequisites:** [09 — Load Testing](./09-load-testing.md)
+> **Prerequisites:** [Previous Chapter](./12-load-testing.md)
 
 ---
 
@@ -328,4 +328,4 @@ done
 
 ---
 
-**Next:** [11 — Logging: Loki, Promtail, and LogQL →](./11-logging.md)
+**Next:** [Next Chapter](./14-logging.md)

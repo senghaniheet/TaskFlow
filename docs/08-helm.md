@@ -1,6 +1,6 @@
-# 05 — Helm: The Package Manager for Kubernetes
+# 08 — Helm: The Package Manager for Kubernetes
 
-> **Prerequisites:** [04 — Storage](./04-storage.md)
+> **Prerequisites:** [Previous Chapter](./07-statefulsets.md)
 
 ---
 
@@ -754,4 +754,4 @@ helm history taskflow --namespace taskflow
 
 ---
 
-**Next:** [06 — CI/CD: Automated Deployments →](./06-cicd.md)
+**Next:** [Next Chapter](./09-cicd.md)
