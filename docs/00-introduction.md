@@ -69,18 +69,89 @@ Each **Worker Node** runs three things:
 
 | Component | Role | Analogy |
 |-----------|------|---------|
-| **API Server** | The front door. All `kubectl` commands talk to it. | Reception desk |
-| **etcd** | A distributed key-value store. The cluster's source of truth. Stores all state. | The database |
-| **Scheduler** | Decides which Node a new Pod should run on (based on resources, affinity rules). | Dispatcher |
-| **Controller Manager** | Watches actual vs desired state. Creates new pods when replicas are missing. | The enforcer |
+| **API Server** | The front door. All `kubectl` commands talk to it. Validates, authenticates, and persists every request. | Reception desk + security guard |
+| **etcd** | A distributed key-value store. The cluster's single source of truth. Every resource you create is stored here as JSON. | The database |
+| **Scheduler** | Decides which Node a new Pod should run on (based on available CPU/RAM, node affinity, taints/tolerations). | Dispatcher |
+| **Controller Manager** | Watches actual vs desired state. If you asked for 3 replicas and one dies, it triggers creation of a new one. | The enforcer |
 
 ### Worker Node Components
 
 | Component | Role |
 |-----------|------|
-| **Kubelet** | Agent on every node. Receives pod specs from the API Server and starts containers. |
-| **kube-proxy** | Manages network rules (iptables/IPVS) for Service traffic routing. |
+| **Kubelet** | Agent on every node. Receives pod specs from the API Server and instructs the container runtime to start/stop containers. Reports node and pod health back up. |
+| **kube-proxy** | Runs on every node. Manages the `iptables`/IPVS rules that make Services work. When you call `api:5000` from a pod, kube-proxy is what ensures the packet is forwarded to the correct destination pod with minimal network overhead — without the traffic ever leaving the node if the target pod is local. |
 | **Container Runtime** | Actually runs containers (containerd, CRI-O). Docker is not used in modern K8s. |
+
+---
+
+## 🔄 How the Control Plane Orchestrates a Workload
+
+Understanding the exact sequence of events from `kubectl apply` to a running pod clarifies how all four control plane components and kube-proxy work together.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  kubectl apply -f deployment.yaml                           │
+└────────────────────────┬────────────────────────────────────┘
+                         │ HTTP/REST request
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  1. API Server                                              │
+│     • Authenticates the request (who are you?)              │
+│     • Authorizes it (are you allowed to create Deployments?)│
+│     • Validates the YAML schema                             │
+│     • Writes the Deployment object to etcd                  │
+└────────────────────────┬────────────────────────────────────┘
+                         │ writes to
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  2. etcd                                                    │
+│     • Stores the Deployment definition as the desired state │
+│     • Notifies watchers (Controller Manager) of the change  │
+└────────────────────────┬────────────────────────────────────┘
+                         │ notifies
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  3. Controller Manager (Deployment Controller)              │
+│     • Sees: desired=3 replicas, actual=0                    │
+│     • Creates a ReplicaSet object                           │
+│     • ReplicaSet Controller sees: desired=3 pods, actual=0  │
+│     • Creates 3 Pod objects (in Pending state) in etcd      │
+└────────────────────────┬────────────────────────────────────┘
+                         │ 3 unscheduled pods
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  4. Scheduler                                               │
+│     • Watches for pods with no assigned node                │
+│     • Scores all available nodes (CPU, RAM, affinity rules) │
+│     • Assigns each pod to the best-fit node                 │
+│     • Writes the node assignment back to etcd               │
+└────────────────────────┬────────────────────────────────────┘
+                         │ pod → node assignment
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  5. Kubelet (on the assigned Worker Node)                   │
+│     • Watches etcd for pods assigned to its node            │
+│     • Pulls the container image (via container runtime)     │
+│     • Starts the container                                  │
+│     • Runs liveness/readiness probes                        │
+│     • Reports pod status back to API Server → etcd          │
+└────────────────────────┬────────────────────────────────────┘
+                         │ pod is Running
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  6. kube-proxy (on every node)                              │
+│     • Watches for new Service/Endpoints objects in etcd     │
+│     • When the pod becomes Ready, it is added to the        │
+│       Service's Endpoints list                              │
+│     • kube-proxy updates iptables/IPVS rules on every node  │
+│       so that traffic to the Service ClusterIP is           │
+│       forwarded to this new pod's IP                        │
+│     • Result: the pod is now reachable via its Service       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> [!NOTE]
+> **Why "API Server as gatekeeper"?** Every single piece of communication — from `kubectl`, from the Scheduler, from the Kubelet, from the Controller Manager — goes *through* the API Server. No component talks to etcd directly. No component talks to another component directly. The API Server is the single, enforced choke point for authentication, authorization, and validation.
 
 ---
 
@@ -107,6 +178,95 @@ metadata:
     environment: production
 ```
 
+### Advanced Namespace Strategies
+
+Namespaces are more than just organization — they are the primary tool for **multi-tenancy**, **environment isolation**, and **resource governance** in enterprise clusters.
+
+#### Strategy 1: Environment-per-Namespace (Most Common)
+
+Run staging and production in the same cluster, sharing expensive infrastructure (Ingress Controller, monitoring stack) while keeping application workloads separate:
+
+```
+Same cluster:
+  taskflow-prod     → 3 API replicas, 3 web replicas (production traffic)
+  taskflow-staging  → 1 API replica, 1 web replica (CI/CD deploys here first)
+  monitoring        → shared Prometheus + Grafana (scrapes both namespaces)
+  ingress-nginx     → shared Ingress Controller (routes by hostname)
+```
+
+With Helm, deploying to staging is a single command:
+```bash
+helm upgrade --install taskflow-staging ./helm/taskflow \
+  --namespace taskflow-staging --create-namespace \
+  --values helm/taskflow/values-staging.yaml
+```
+
+#### Strategy 2: Team-per-Namespace
+
+In larger organizations, each team owns a namespace and has scoped RBAC (Role-Based Access Control) — developers can deploy to their namespace but cannot touch another team's resources:
+
+```
+  team-payments      → payments team's services
+  team-auth          → authentication team's services
+  team-notifications → notifications team's services
+```
+
+#### Resource Quotas: Preventing Noisy Neighbours
+
+Without limits, one misbehaving team or runaway HPA can consume all cluster CPU/RAM. A **ResourceQuota** enforces hard caps per namespace:
+
+```yaml
+# k8s-scripts/00-resource-quota.yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: taskflow-quota
+  namespace: taskflow
+spec:
+  hard:
+    # Pod count limits
+    pods: "20"                    # Maximum 20 pods total in this namespace
+    # Compute limits
+    requests.cpu: "4"             # Total CPU requests across all pods ≤ 4 cores
+    requests.memory: 8Gi          # Total memory requests ≤ 8 GiB
+    limits.cpu: "8"               # Total CPU limits ≤ 8 cores
+    limits.memory: 16Gi           # Total memory limits ≤ 16 GiB
+    # Storage limits
+    persistentvolumeclaims: "5"   # Max 5 PVCs
+    requests.storage: 20Gi        # Total storage across all PVCs ≤ 20 GiB
+```
+
+```bash
+# Apply and inspect quota usage
+kubectl apply -f k8s-scripts/00-resource-quota.yaml
+kubectl describe resourcequota taskflow-quota -n taskflow
+# Shows: Used vs Hard limits — instantly see how much headroom you have
+```
+
+> [!NOTE]
+> **LimitRange** is the companion to ResourceQuota. While ResourceQuota sets namespace-wide totals, a LimitRange sets **per-container** default limits — so any pod deployed without explicit resource requests automatically gets sensible defaults rather than running uncapped.
+
+#### Tooling: kubens — Switch Namespaces Instantly
+
+Typing `-n taskflow` on every `kubectl` command gets old fast. The [`kubens`](https://github.com/ahmetb/kubectx) tool lets you set a default namespace for your session:
+
+```bash
+# Install (via kubectx package which includes kubens)
+# Windows (Chocolatey)
+choco install kubectx
+
+# macOS
+brew install kubectx
+
+# Usage
+kubens                    # List all namespaces
+kubens taskflow           # Switch default to taskflow
+kubectl get pods          # Now targets taskflow without -n flag
+kubens monitoring         # Switch to monitoring
+kubectl get pods          # Targets monitoring namespace
+```
+
+Paired with [`kubectx`](https://github.com/ahmetb/kubectx) (which switches between clusters), these two tools are standard in every Kubernetes engineer's toolkit.
 
 ---
 

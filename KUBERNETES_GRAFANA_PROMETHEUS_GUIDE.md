@@ -34,6 +34,20 @@ The documentation has been structured into a 13-part curriculum. Each chapter co
 
 ---
 
+### ⚡ Advanced Topics (Within Chapters)
+
+The following deep-dive sections are embedded within their respective chapters for learners who want to go beyond the basics:
+
+| Topic | Where to Find It |
+|-------|-----------------|
+| How the Control Plane orchestrates a workload (API Server → etcd → Scheduler → Kubelet → kube-proxy, step-by-step) | [00 — Introduction §Control Plane Orchestration](./docs/00-introduction.md) |
+| Advanced Namespace strategies: env-per-namespace, team-per-namespace, ResourceQuota, kubens | [00 — Introduction §Advanced Namespace Strategies](./docs/00-introduction.md) |
+| StatefulSet deep dive: sticky identities, PV reattachment, Headless Service DNS, production database guidance | [01 — Core Workloads §Why StatefulSets Are Fundamentally Different](./docs/01-core-workloads.md) |
+| Cloud vs Bare-Metal Ingress architecture, Default Backend configuration | [02 — Networking §Cloud vs. Bare-Metal](./docs/02-networking.md) |
+| Helm as a Templating Engine: DRY pattern, environment promotion, CI/CD injection, Helm Registries | [05 — Helm §Helm as a Templating Engine](./docs/05-helm.md) |
+
+---
+
 ## 🏗️ Project Architecture Overview
 
 This project runs the TaskFlow API (Node.js/Express) and Web UI (React) backed by MongoDB. The entire stack is instrumented for metrics, logs, and traces.

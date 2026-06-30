@@ -135,6 +135,130 @@ Helm uses Go's `text/template` engine. Values are injected with `{{ }}` markers.
 
 ---
 
+## Helm as a Templating Engine: Multi-Service Blueprinting
+
+Beyond being a package manager, Helm's most powerful day-to-day role is as a **templating engine** that eliminates copy-paste YAML across microservices and environments.
+
+### The DRY Problem
+
+Imagine your project grows to three microservices: `api`, `web`, and a new `worker` service. Each needs a Deployment, Service, HPA, and PDB. Without Helm, you end up with nearly-identical YAML files:
+
+```
+k8s-scripts/
+  api-deployment.yaml    ← 60 lines
+  web-deployment.yaml    ← 58 lines  (99% identical to api-deployment.yaml)
+  worker-deployment.yaml ← 61 lines  (99% identical to both)
+```
+
+Every time you need to add a label, change the probe path, or update the resource policy, you make the same change in three places. One missed edit causes a production incident.
+
+**Helm's answer:** one blueprint, injected with per-service values.
+
+```
+helm/taskflow/
+  templates/
+    api-deployment.yaml      ← ONE template, handles all services
+    _helpers.tpl              ← shared functions (labels, names, selectors)
+  values.yaml                ← api:, web:, worker: each with their own overrides
+```
+
+### Environment Promotion: values-staging.yaml Pattern
+
+The most common real-world Helm pattern is **layered values files**. A base `values.yaml` defines production defaults, and environment-specific files override only what differs:
+
+```yaml
+# values.yaml (production defaults)
+api:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    maxReplicas: 10
+  resources:
+    requests:
+      cpu: 200m
+      memory: 128Mi
+```
+
+```yaml
+# values-staging.yaml (only the overrides)
+api:
+  replicaCount: 1          # Save resources in staging
+  autoscaling:
+    enabled: false         # No autoscaling needed
+  resources:
+    requests:
+      cpu: 50m             # Minimal footprint
+      memory: 64Mi
+```
+
+Deploy to each environment by layering the files:
+```bash
+# Production — uses values.yaml defaults
+helm upgrade --install taskflow ./helm/taskflow \
+  --namespace taskflow \
+  --values helm/taskflow/values.yaml
+
+# Staging — base values overridden by staging file
+helm upgrade --install taskflow-staging ./helm/taskflow \
+  --namespace taskflow-staging \
+  --values helm/taskflow/values.yaml \
+  --values helm/taskflow/values-staging.yaml   # Applied last, wins on conflicts
+```
+
+### CI/CD Injection: Zero-Touch Deployments
+
+In a CI/CD pipeline (GitHub Actions, Jenkins, GitLab CI), the image tag changes on every commit. Helm's `--set` flag lets the pipeline inject dynamic values at deploy time without modifying any YAML files:
+
+```bash
+# In your GitHub Actions workflow:
+- name: Deploy to Kubernetes
+  run: |
+    helm upgrade --install taskflow ./helm/taskflow \
+      --namespace taskflow \
+      --set api.image.tag=${{ github.sha }} \     # ← inject the Git commit SHA
+      --set web.image.tag=${{ github.sha }} \
+      --set api.replicaCount=3 \
+      --atomic \    # Roll back automatically if deployment fails
+      --timeout 5m
+```
+
+The deployed image tag is now permanently recorded in the Helm release history:
+```bash
+helm history taskflow -n taskflow
+# REVISION  UPDATED        STATUS    CHART           DESCRIPTION
+# 1         2h ago         deployed  taskflow-0.1.0  Install complete
+# 2         1h ago         deployed  taskflow-0.1.0  Upgrade complete (api.image.tag=abc1234)
+# 3         5m ago         deployed  taskflow-0.1.0  Upgrade complete (api.image.tag=def5678)
+
+helm rollback taskflow 2 -n taskflow  # ← one command rolls back to the previous image
+```
+
+### Helm Registries: Distributing Charts Like Docker Images
+
+Just like Docker images, Helm charts can be hosted and distributed via registries. This makes it easy to share production-grade, pre-configured microservice blueprints across an organization or with the open-source community.
+
+```bash
+# Public registries — browse community charts
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm search repo grafana/loki        # Search the registry
+helm show values grafana/loki        # Inspect a chart's configurable values
+helm install loki grafana/loki-stack # Install from registry (no local download needed)
+
+# OCI-based registries (Docker Hub, GHCR, ECR) — modern standard
+helm push ./helm/taskflow/ oci://ghcr.io/senghaniheet/helm-charts
+helm install taskflow oci://ghcr.io/senghaniheet/helm-charts/taskflow --version 1.2.0
+
+# Enterprise private registries (Harbor, Nexus, JFrog Artifactory)
+helm repo add company-charts https://charts.internal.company.com
+helm install taskflow company-charts/taskflow
+```
+
+> [!NOTE]
+> Hosting your charts in a private registry means every team in your organization installs their microservices identically — same probes, same resource policies, same security headers — with only their `values.yaml` customizing the specifics. This is how platform engineering teams standardize deployments across hundreds of microservices without managing hundreds of individual YAML repos.
+
+---
+
 ## Migration Walkthrough: From Raw YAML to Helm
 
 The following three examples walk through the **exact same files** from `k8s-scripts/` and show how each one becomes a Helm template. Each example introduces new template concepts.

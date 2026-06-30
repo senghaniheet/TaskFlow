@@ -296,6 +296,119 @@ kubectl get ingress -n taskflow
 
 ---
 
+## Cloud vs. Bare-Metal: How Traffic Gets Into the Cluster
+
+The Ingress resource and the Nginx Ingress Controller you've configured work identically regardless of environment. What *changes* between Minikube, cloud, and bare-metal is **how external traffic gets to the Ingress Controller in the first place**.
+
+### Minikube (Local Development)
+
+```
+Browser
+  │ taskflow.local → 192.168.49.2 (via /etc/hosts)
+  ▼
+Minikube VM (NodePort or tunnel)
+  ▼
+Nginx Ingress Controller Pod
+  ▼
+Service (api / web) → Pods
+```
+
+`minikube tunnel` or NodePort exposes the Ingress Controller. No real external load balancer exists — just your laptop's routing table.
+
+### Cloud (AWS / GCP / Azure) — Automatic
+
+```
+Browser
+  │ taskflow.com → DNS → a1b2c3d4.elb.amazonaws.com
+  ▼
+Cloud Load Balancer (auto-provisioned by cloud provider)
+  │ created automatically when you define Service type: LoadBalancer
+  ▼
+Nginx Ingress Controller Service (type: LoadBalancer)
+  ▼
+Nginx Ingress Controller Pods
+  ▼
+Service (api / web) → Pods
+```
+
+When you create a `Service` of `type: LoadBalancer` in a cloud cluster, the cloud provider's **controller** automatically provisions a native hardware load balancer (AWS ELB, GCP GCLB, Azure Application Gateway) and wires it to your cluster nodes. You pay per hour for the load balancer; you get a real external IP or hostname.
+
+### Bare-Metal (On-Premise) — Manual
+
+```
+Browser
+  │ taskflow.com → DNS → 203.0.113.10 (your server's public IP)
+  ▼
+External Proxy Server (HAProxy / Nginx / MetalLB)
+  │ manually configured by an administrator to forward
+  │ port 80/443 traffic into the cluster
+  ▼
+Nginx Ingress Controller NodePort Service
+  ▼
+Nginx Ingress Controller Pods
+  ▼
+Service (api / web) → Pods
+```
+
+In a bare-metal cluster, `type: LoadBalancer` does nothing — no cloud controller exists to provision hardware. You must either:
+- Run **MetalLB** (a Kubernetes-native load balancer for bare-metal that assigns real IPs from a configured pool)
+- Place a dedicated **external proxy** (HAProxy, Nginx) in front of the cluster to forward traffic to the Ingress Controller via NodePort
+
+### Comparison Table
+
+| Aspect | Minikube | Cloud (EKS/GKE/AKS) | Bare-Metal |
+|--------|----------|---------------------|------------|
+| **Entry point** | `minikube tunnel` / `/etc/hosts` | Auto-provisioned Cloud LB | Manual external proxy / MetalLB |
+| **External IP** | Localhost / VM IP | Real cloud IP (ELB, GCLB) | Your server's public IP |
+| **Cost** | Free | Pay per LB per hour | Hardware + ops cost |
+| **Setup** | Zero | Zero (created automatically) | Significant manual config |
+| **Ingress Controller** | Same (Nginx) | Same (Nginx) | Same (Nginx) |
+| **Ingress rules** | Identical YAML | Identical YAML | Identical YAML |
+
+> [!TIP]
+> The key insight is that your **Ingress rules YAML never changes** between environments. Only the infrastructure layer that delivers traffic to the Ingress Controller differs. This is why Ingress is such a powerful abstraction — write your routing rules once, deploy anywhere.
+
+### Default Backend: Handling Unmatched Requests
+
+Every Ingress Controller includes a **default backend** — a fallback handler for requests that don't match any Ingress rule. Without it, unmatched requests receive a raw system-level error.
+
+```
+Request: http://taskflow.local/this-path-does-not-exist
+         │
+         ▼
+Nginx Ingress Controller
+  Checks all rules:
+    /api  → api:5000      ✗ no match
+    /     → web:80        ✓ catch-all match → routed to web frontend
+
+Request: http://unknown-host.com/anything
+         │
+         ▼
+Nginx Ingress Controller
+  No host rule matches → routed to DEFAULT BACKEND
+  Returns: custom 404 page or error message
+```
+
+The default backend is most important when you have **strict host-based routing** (different domains for different apps on the same cluster). You can configure a custom default backend to serve a branded 404 page:
+
+```yaml
+# In Nginx Ingress Controller Helm values (monitoring/nginx-values.yaml):
+defaultBackend:
+  enabled: true
+  image:
+    repository: nginx
+    tag: alpine
+  # Or point to your own custom error page service
+```
+
+```bash
+# Test the default backend directly
+curl -H "Host: nonexistent.example.com" http://$(minikube ip)
+# → Returns the default backend's response instead of a raw connection error
+```
+
+---
+
 ## Traffic Flow: End-to-End
 
 ```
