@@ -88,72 +88,12 @@ Each **Worker Node** runs three things:
 
 Understanding the exact sequence of events from `kubectl apply` to a running pod clarifies how all four control plane components and kube-proxy work together.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  kubectl apply -f deployment.yaml                           │
-└────────────────────────┬────────────────────────────────────┘
-                         │ HTTP/REST request
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  1. API Server                                              │
-│     • Authenticates the request (who are you?)              │
-│     • Authorizes it (are you allowed to create Deployments?)│
-│     • Validates the YAML schema                             │
-│     • Writes the Deployment object to etcd                  │
-└────────────────────────┬────────────────────────────────────┘
-                         │ writes to
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  2. etcd                                                    │
-│     • Stores the Deployment definition as the desired state │
-│     • Notifies watchers (Controller Manager) of the change  │
-└────────────────────────┬────────────────────────────────────┘
-                         │ notifies
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  3. Controller Manager (Deployment Controller)              │
-│     • Sees: desired=3 replicas, actual=0                    │
-│     • Creates a ReplicaSet object                           │
-│     • ReplicaSet Controller sees: desired=3 pods, actual=0  │
-│     • Creates 3 Pod objects (in Pending state) in etcd      │
-└────────────────────────┬────────────────────────────────────┘
-                         │ 3 unscheduled pods
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  4. Scheduler                                               │
-│     • Watches for pods with no assigned node                │
-│     • Scores all available nodes (CPU, RAM, affinity rules) │
-│     • Assigns each pod to the best-fit node                 │
-│     • Writes the node assignment back to etcd               │
-└────────────────────────┬────────────────────────────────────┘
-                         │ pod → node assignment
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  5. Kubelet (on the assigned Worker Node)                   │
-│     • Watches etcd for pods assigned to its node            │
-│     • Pulls the container image (via container runtime)     │
-│     • Starts the container                                  │
-│     • Runs liveness/readiness probes                        │
-│     • Reports pod status back to API Server → etcd          │
-└────────────────────────┬────────────────────────────────────┘
-                         │ pod is Running
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  6. kube-proxy (on every node)                              │
-│     • Watches for new Service/Endpoints objects in etcd     │
-│     • When the pod becomes Ready, it is added to the        │
-│       Service's Endpoints list                              │
-│     • kube-proxy updates iptables/IPVS rules on every node  │
-│       so that traffic to the Service ClusterIP is           │
-│       forwarded to this new pod's IP                        │
-│     • Result: the pod is now reachable via its Service       │
-└─────────────────────────────────────────────────────────────┘
-```
+![Control Plane Request Flow](../assets/ControlPlaneRequestFlow.png)
 
 > [!NOTE]
 > **Why "API Server as gatekeeper"?** Every single piece of communication — from `kubectl`, from the Scheduler, from the Kubelet, from the Controller Manager — goes *through* the API Server. No component talks to etcd directly. No component talks to another component directly. The API Server is the single, enforced choke point for authentication, authorization, and validation.
 
-![Control Plane Request Flow](../assets/ControlPlaneRequestFlow.png)
+
 
 ---
 
